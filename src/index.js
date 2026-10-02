@@ -2,760 +2,692 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 
+/* =========================================================
+   TRT RESEARCH v6
+   Academic Research + Adversarial RED TEAM
+   ========================================================= */
+
 const NVIDIA_URL =
   "https://integrate.api.nvidia.com/v1/chat/completions";
 
 const NVIDIA_MODEL =
   "nvidia/nemotron-3-ultra-550b-a55b";
 
-/*
-=========================================================
-TAMER RED TEAM — CORE RESEARCH PROTOCOL
-=========================================================
-*/
-
-const TRT_RESEARCH_SYSTEM = `
-You are TRT Research:
-Tamer RED TEAM Research Council.
-
-MISSION
-
-Help conduct ambitious, exploratory, adversarial research.
-
-Do NOT become automatically conservative merely because an idea is novel,
-interdisciplinary, unconventional, or has not been stated explicitly in
-the literature.
-
-Novel synthesis is allowed and encouraged.
-
-At the same time, never fabricate evidence.
-
-CORE PRINCIPLE
-
-BE BOLD IN RESEARCH.
-BE ADVERSARIAL IN REASONING.
-BE PRECISE ABOUT EVIDENCE.
-NEVER INVENT A SOURCE OR FACT.
-
----------------------------------------------------------
-1. USER INSTRUCTION FIDELITY
----------------------------------------------------------
-
-Execute the user's requested task faithfully.
-
-Preserve requested:
-
-- scope
-- sample size
-- categories
-- inclusion criteria
-- exclusion criteria
-- output structure
-- stopping conditions
-- requested comparisons
-- requested tables or classifications
-- requested research question
-
-Do not silently replace the user's task with a task you prefer.
-
-Do not reduce the requested scope merely because another approach
-would be easier.
-
-If part of the requested task cannot be completed from the supplied
-material, explicitly identify that limitation instead of silently
-substituting something else.
-
----------------------------------------------------------
-2. RESEARCH ATTITUDE
----------------------------------------------------------
-
-Investigate aggressively.
-
-Do not reject an idea merely because no paper states it explicitly.
-
-Search conceptually for:
-
-- supporting mechanisms
-- indirect evidence
-- converging evidence
-- contradictory evidence
-- boundary conditions
-- alternative mechanisms
-- counterexamples
-- adjacent disciplines
-- unexplored combinations of known findings
-- testable implications
-
-Distinguish carefully between:
-
-A. DIRECT EVIDENCE
-B. INDIRECT EVIDENCE
-C. COUNTER-EVIDENCE
-D. CONTEXTUAL EVIDENCE
-E. NOVEL SYNTHESIS / INFERENCE
-F. SPECULATION REQUIRING TESTING
-
-Novel synthesis is legitimate.
-
-Never disguise novel synthesis as an established published finding.
-
----------------------------------------------------------
-3. RED TEAM — REVERSE THE QUESTION
----------------------------------------------------------
-
-For every important conclusion, ask:
-
-- What if the opposite is true?
-- What evidence would contradict this?
-- Is there another mechanism producing the same observation?
-- Is selection bias possible?
-- Is measurement error possible?
-- Is reverse causality possible?
-- Is confounding possible?
-- Are we confusing correlation with causation?
-- Are there denominator or sample inconsistencies?
-- Is the result dependent on one classification choice?
-- What evidence would falsify our preferred interpretation?
-- What observation would make us abandon the hypothesis?
-
-Do not attack an idea merely for being unconventional.
-
-Attack weak reasoning, weak evidence, hidden assumptions,
-and unfalsifiable claims.
-
----------------------------------------------------------
-4. EVIDENCE DISCIPLINE
----------------------------------------------------------
-
-Never invent:
-
-- papers
-- authors
-- titles
-- journals
-- books
-- DOIs
-- PMIDs
-- quotations
-- datasets
-- statistics
-- sample sizes
-- study findings
-- publication years
-
-If bibliographic information is not present in the supplied material,
-do not manufacture it.
-
-If you recognize a source from model knowledge but cannot verify the
-bibliographic details from supplied evidence, clearly label those
-details as requiring verification.
-
-Never create a plausible-looking DOI.
-
-Never create a plausible-looking citation.
-
----------------------------------------------------------
-5. SOURCE INTERPRETATION
----------------------------------------------------------
-
-Do not claim that a source proves something merely because:
-
-- its title appears relevant
-- its abstract contains related terminology
-- another source cites it
-- the finding sounds plausible
-
-Separate:
-
-WHAT THE SOURCE REPORTS
-
-from
-
-WHAT WE INFER FROM THE SOURCE.
-
-When multiple pieces of evidence are combined into a new idea,
-label the result:
-
-NOVEL SYNTHESIS.
-
----------------------------------------------------------
-6. CONTRADICTORY EVIDENCE
----------------------------------------------------------
-
-Actively seek conceptual reasons the working hypothesis could fail.
-
-Do not suppress inconvenient evidence.
-
-When evidence conflicts:
-
-- identify the conflict
-- compare study design and evidence quality
-- identify population/context differences
-- identify measurement differences
-- identify temporal differences
-- explain whether the disagreement is resolvable
-
-Do not manufacture false balance.
-
----------------------------------------------------------
-7. METHODOLOGY
----------------------------------------------------------
-
-When relevant inspect:
-
-- sampling
-- selection
-- controls
-- measurement validity
-- classification
-- missing data
-- denominators
-- statistical assumptions
-- specification
-- robustness
-- sensitivity
-- endogeneity
-- confounding
-- multiple testing
-- overfitting
-- data leakage
-- reproducibility
-- external validity
-- internal validity
-
----------------------------------------------------------
-8. RESEARCH EXPANSION
----------------------------------------------------------
-
-When the evidence permits it, go beyond summarization.
-
-Ask:
-
-- What follows from these findings?
-- Which findings become interesting when combined?
-- Is there an untested bridge between two literatures?
-- What mechanism could connect them?
-- What predictions would that mechanism generate?
-- What experiment or dataset could test it?
-
-Generate new research hypotheses when justified.
-
-Label them clearly as hypotheses.
-
----------------------------------------------------------
-9. FALSIFICATION
----------------------------------------------------------
-
-For every major novel hypothesis propose at least one way to test
-whether it is wrong.
-
-A useful hypothesis should expose itself to possible failure.
-
-Specify where possible:
-
-- observable prediction
-- competing prediction
-- required data
-- discriminating test
-- result that would weaken the hypothesis
-- result that would strongly contradict it
-
----------------------------------------------------------
-10. OUTPUT QUALITY
----------------------------------------------------------
-
-Prioritize substance over generic warnings.
-
-Do not fill the answer with repetitive caveats.
-
-Do not become timid merely because uncertainty exists.
-
-Express uncertainty precisely and continue the analysis.
-
-When evidence is strong, say so.
-
-When evidence is weak, say so.
-
-When the connection is novel but logically interesting, explore it.
-
-When something is unknown, say it is unknown.
-
----------------------------------------------------------
-11. FINAL SYNTHESIS
----------------------------------------------------------
-
-For substantial research tasks, organize the final analysis around:
-
-1. Research question
-2. Evidence supporting the hypothesis
-3. Evidence against the hypothesis
-4. Alternative explanations
-5. Methodological vulnerabilities
-6. Evidence map
-7. Novel synthesis
-8. Falsification tests
-9. What survives RED TEAM scrutiny
-10. What remains uncertain
-11. Highest-value next research steps
-
-Do not invent references to make the answer look more academic.
-`;
-
-const STANDARD_SYSTEM = `
-You are Tamer RED TEAM.
-
-Perform a concise but rigorous adversarial review.
-
-Identify:
-- main claim
-- strongest aspect
-- weaknesses
-- hidden assumptions
-- alternative explanations
-- missing evidence
-- concrete corrections
-
-Do not fabricate facts or references.
-`;
-
-const DEEP_SYSTEM = `
-You are Tamer RED TEAM conducting a deep scientific review.
-
-Examine:
-- methodology
-- evidence
-- sampling
-- measurement
-- statistics
-- causality
-- confounding
-- robustness
-- reproducibility
-- alternative explanations
-- contradictions
-- publication risks
-
-Do not fabricate facts or references.
-`;
-
-const MAX_SYSTEM = `
-You are Tamer RED TEAM operating in maximum adversarial mode.
-
-Attempt to falsify the argument.
-
-Review from:
-- methodology
-- statistics
-- domain expertise
-- skeptical editor
-- replication
-- causal inference
-
-Identify critical blockers, major risks, robustness tests,
-counterarguments and exact repairs.
-
-Do not fabricate facts or references.
-`;
-
-/*
-=========================================================
-NVIDIA CALL
-=========================================================
-*/
-
-async function callNvidia(
-  env,
-  systemPrompt,
-  userPrompt,
-  maxTokens = 1500,
-  reasoningEffort = "none"
-) {
-  if (!env || !env.NVIDIA_API_KEY) {
-    throw new Error(
-      "NVIDIA_API_KEY secret is missing or unavailable."
+/* =========================================================
+   BASIC HELPERS
+   ========================================================= */
+
+function cleanText(value = "") {
+  return String(value)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeDoi(value = "") {
+  return String(value)
+    .trim()
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
+    .replace(/^doi:\s*/i, "")
+    .toLowerCase();
+}
+
+function normalizeTitle(value = "") {
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function first(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function safeYear(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 1000 && n < 3000
+    ? n
+    : null;
+}
+
+function makeRecord({
+  source,
+  id = "",
+  title = "",
+  abstract = "",
+  authors = [],
+  year = null,
+  venue = "",
+  doi = "",
+  pmid = "",
+  url = "",
+  citationCount = null
+}) {
+  return {
+    source,
+    id: String(id || ""),
+    title: cleanText(title),
+    abstract: cleanText(abstract),
+    authors: Array.isArray(authors)
+      ? authors.map(cleanText).filter(Boolean)
+      : [],
+    year: safeYear(year),
+    venue: cleanText(venue),
+    doi: normalizeDoi(doi),
+    pmid: String(pmid || "").trim(),
+    url: String(url || "").trim(),
+    citationCount:
+      Number.isFinite(Number(citationCount))
+        ? Number(citationCount)
+        : null
+  };
+}
+
+function recordKey(record) {
+  if (record.doi) {
+    return `doi:${record.doi}`;
+  }
+
+  if (record.pmid) {
+    return `pmid:${record.pmid}`;
+  }
+
+  const title = normalizeTitle(record.title);
+
+  if (title) {
+    return `title:${title}`;
+  }
+
+  return `${record.source}:${record.id}`;
+}
+
+function mergeRecords(oldRecord, newRecord) {
+  const mergedSources = new Set([
+    ...(oldRecord.sources || [oldRecord.source]),
+    ...(newRecord.sources || [newRecord.source])
+  ]);
+
+  return {
+    ...oldRecord,
+
+    title:
+      oldRecord.title.length >= newRecord.title.length
+        ? oldRecord.title
+        : newRecord.title,
+
+    abstract:
+      oldRecord.abstract.length >= newRecord.abstract.length
+        ? oldRecord.abstract
+        : newRecord.abstract,
+
+    authors:
+      oldRecord.authors.length >= newRecord.authors.length
+        ? oldRecord.authors
+        : newRecord.authors,
+
+    year: oldRecord.year || newRecord.year,
+
+    venue:
+      oldRecord.venue || newRecord.venue,
+
+    doi:
+      oldRecord.doi || newRecord.doi,
+
+    pmid:
+      oldRecord.pmid || newRecord.pmid,
+
+    url:
+      oldRecord.url || newRecord.url,
+
+    citationCount:
+      Math.max(
+        oldRecord.citationCount || 0,
+        newRecord.citationCount || 0
+      ) || null,
+
+    sources: Array.from(mergedSources)
+  };
+}
+
+function deduplicate(records) {
+  const map = new Map();
+
+  for (const record of records) {
+    if (!record || !record.title) continue;
+
+    const key = recordKey(record);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        ...record,
+        sources: [record.source]
+      });
+    } else {
+      map.set(
+        key,
+        mergeRecords(map.get(key), record)
+      );
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+/* =========================================================
+   OPENALEX ABSTRACT DECODER
+   ========================================================= */
+
+function decodeOpenAlexAbstract(invertedIndex) {
+  if (
+    !invertedIndex ||
+    typeof invertedIndex !== "object"
+  ) {
+    return "";
+  }
+
+  const words = [];
+
+  for (const [word, positions] of Object.entries(
+    invertedIndex
+  )) {
+    if (!Array.isArray(positions)) continue;
+
+    for (const position of positions) {
+      words.push([position, word]);
+    }
+  }
+
+  words.sort((a, b) => a[0] - b[0]);
+
+  return words.map((x) => x[1]).join(" ");
+}
+
+/* =========================================================
+   OPENALEX
+   ========================================================= */
+
+async function searchOpenAlex(env, query, limit) {
+  const params = new URLSearchParams({
+    search: query,
+    per_page: String(Math.min(limit, 100))
+  });
+
+  if (env.OPENALEX_API_KEY) {
+    params.set(
+      "api_key",
+      env.OPENALEX_API_KEY
     );
   }
 
-  const response = await fetch(NVIDIA_URL, {
-    method: "POST",
-
-    headers: {
-      Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
-
-    body: JSON.stringify({
-      model: NVIDIA_MODEL,
-
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt
-        },
-        {
-          role: "user",
-          content: userPrompt
-        }
-      ],
-
-      temperature: 0.2,
-      max_tokens: maxTokens,
-      reasoning_effort: reasoningEffort,
-      stream: false
-    })
-  });
-
-  const raw = await response.text();
+  const response = await fetch(
+    `https://api.openalex.org/works?${params.toString()}`
+  );
 
   if (!response.ok) {
     throw new Error(
-      `NVIDIA inference error ${response.status}: ${raw}`
+      `OpenAlex ${response.status}: ${await response.text()}`
     );
   }
 
-  let data;
+  const data = await response.json();
 
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error(
-      `NVIDIA returned invalid JSON: ${raw}`
-    );
-  }
-
-  const text =
-    data?.choices?.[0]?.message?.content;
-
-  if (!text) {
-    throw new Error(
-      `NVIDIA returned no response text. Raw response: ${raw}`
-    );
-  }
-
-  return text;
+  return (data.results || []).map((item) =>
+    makeRecord({
+      source: "OpenAlex",
+      id: item.id,
+      title: item.title || item.display_name,
+      abstract: decodeOpenAlexAbstract(
+        item.abstract_inverted_index
+      ),
+      authors: (item.authorships || [])
+        .map(
+          (a) =>
+            a?.author?.display_name || ""
+        )
+        .filter(Boolean),
+      year: item.publication_year,
+      venue:
+        item?.primary_location?.source
+          ?.display_name || "",
+      doi: item.doi || "",
+      url:
+        item?.primary_location?.landing_page_url ||
+        item?.id ||
+        "",
+      citationCount:
+        item.cited_by_count
+    })
+  );
 }
 
-/*
-=========================================================
-MCP SERVER
-=========================================================
-*/
+/* =========================================================
+   IEEE XPLORE
+   ========================================================= */
 
-function createServer(env) {
-  const server = new McpServer({
-    name: "TRT — Tamer RED TEAM",
-    version: "5.0.0"
+async function searchIEEE(env, query, limit) {
+  if (!env.IEEE_API_KEY) {
+    return {
+      skipped: true,
+      reason: "IEEE_API_KEY missing",
+      records: []
+    };
+  }
+
+  const params = new URLSearchParams({
+    apikey: env.IEEE_API_KEY,
+    format: "json",
+    max_records: String(
+      Math.min(limit, 200)
+    ),
+    start_record: "1",
+    sort_order: "desc",
+    sort_field: "article_title",
+    querytext: query
   });
 
-  const simpleSchema = z.object({
-    text: z
-      .string()
-      .min(1)
-      .describe(
-        "Material, claim, argument, analysis, draft or research question."
-      )
-  });
+  const response = await fetch(
+    `https://ieeexploreapi.ieee.org/api/v1/search/articles?${params.toString()}`
+  );
 
-  const researchSchema = z.object({
-    task: z
-      .string()
-      .min(1)
-      .describe(
-        "The exact research task or instruction that must be followed."
-      ),
+  if (!response.ok) {
+    throw new Error(
+      `IEEE ${response.status}: ${await response.text()}`
+    );
+  }
 
-    material: z
-      .string()
-      .optional()
-      .describe(
-        "Research material, notes, evidence, excerpts, source summaries, data descriptions or draft text supplied for analysis."
-      ),
+  const data = await response.json();
 
-    constraints: z
-      .string()
-      .optional()
-      .describe(
-        "Required scope, categories, sample size, inclusion/exclusion criteria, output structure or other instructions that must be preserved."
-      )
-  });
+  const records = (data.articles || []).map(
+    (item) => {
+      const authors =
+        item?.authors?.authors?.map(
+          (a) =>
+            a.full_name ||
+            a.author_name ||
+            ""
+        ) || [];
 
-  /*
-  -------------------------------------------------------
-  TRT RESEARCH — PRIMARY TOOL
-  -------------------------------------------------------
-  */
-
-  server.registerTool(
-    "trt_research",
-    {
-      description:
-        "Primary TRT research mode. Conduct ambitious adversarial research, reverse-test the working hypothesis, examine supporting and contradictory evidence, develop novel synthesis when justified, propose falsification tests, and follow the user's requested scope and structure exactly. Never fabricate bibliographic information.",
-
-      inputSchema: researchSchema
-    },
-
-    async ({
-      task,
-      material = "",
-      constraints = ""
-    }) => {
-      try {
-        const prompt = `
-USER'S RESEARCH TASK
-
-${task}
-
-MANDATORY CONSTRAINTS / OUTPUT REQUIREMENTS
-
-${constraints || "No additional constraints supplied."}
-
-SUPPLIED RESEARCH MATERIAL
-
-${material || "No additional research material supplied."}
-
-INSTRUCTIONS
-
-Perform the task using the full TRT Research protocol.
-
-Do not replace the user's task with a narrower task.
-
-Research the question conceptually and adversarially.
-
-Develop novel synthesis when warranted.
-
-Explicitly distinguish direct evidence, indirect evidence,
-counter-evidence and novel synthesis.
-
-Attempt to falsify important conclusions.
-
-Do not fabricate bibliographic information.
-
-Return the most useful research result possible from the material
-and knowledge available to you.
-`;
-
-        const result = await callNvidia(
-          env,
-          TRT_RESEARCH_SYSTEM,
-          prompt,
-          3500,
-          "none"
-        );
-
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                `TRT — Tamer RED TEAM Research\n` +
-                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
-                result
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          isError: true,
-
-          content: [
-            {
-              type: "text",
-              text:
-                `TRT Research error: ${
-                  error instanceof Error
-                    ? error.message
-                    : String(error)
-                }`
-            }
-          ]
-        };
-      }
+      return makeRecord({
+        source: "IEEE Xplore",
+        id:
+          item.article_number ||
+          item.index_terms ||
+          "",
+        title: item.title,
+        abstract: item.abstract,
+        authors,
+        year:
+          item.publication_year ||
+          item.publication_date,
+        venue:
+          item.publication_title,
+        doi: item.doi,
+        url:
+          item.html_url ||
+          item.pdf_url ||
+          "",
+        citationCount:
+          item.citing_paper_count
+      });
     }
   );
 
-  /*
-  -------------------------------------------------------
-  STANDARD RED TEAM
-  -------------------------------------------------------
-  */
-
-  server.registerTool(
-    "red_team",
-    {
-      description:
-        "Quick adversarial TRT review.",
-
-      inputSchema: simpleSchema
-    },
-
-    async ({ text }) => {
-      try {
-        const result = await callNvidia(
-          env,
-          STANDARD_SYSTEM,
-          text,
-          1500,
-          "none"
-        );
-
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                `TRT STANDARD\n` +
-                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
-                result
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          isError: true,
-
-          content: [
-            {
-              type: "text",
-              text:
-                `RED TEAM error: ${
-                  error instanceof Error
-                    ? error.message
-                    : String(error)
-                }`
-            }
-          ]
-        };
-      }
-    }
-  );
-
-  /*
-  -------------------------------------------------------
-  DEEP
-  -------------------------------------------------------
-  */
-
-  server.registerTool(
-    "red_team_deep",
-    {
-      description:
-        "Deep scientific and methodological TRT review.",
-
-      inputSchema: simpleSchema
-    },
-
-    async ({ text }) => {
-      try {
-        const result = await callNvidia(
-          env,
-          DEEP_SYSTEM,
-          text,
-          3000,
-          "none"
-        );
-
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                `TRT DEEP\n` +
-                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
-                result
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          isError: true,
-
-          content: [
-            {
-              type: "text",
-              text:
-                `RED TEAM DEEP error: ${
-                  error instanceof Error
-                    ? error.message
-                    : String(error)
-                }`
-            }
-          ]
-        };
-      }
-    }
-  );
-
-  /*
-  -------------------------------------------------------
-  MAX
-  -------------------------------------------------------
-  */
-
-  server.registerTool(
-    "red_team_max",
-    {
-      description:
-        "Maximum adversarial TRT review.",
-
-      inputSchema: simpleSchema
-    },
-
-    async ({ text }) => {
-      try {
-        const result = await callNvidia(
-          env,
-          MAX_SYSTEM,
-          text,
-          3500,
-          "none"
-        );
-
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                `TRT MAX\n` +
-                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
-                result
-            }
-          ]
-        };
-      } catch (error) {
-        return {
-          isError: true,
-
-          content: [
-            {
-              type: "text",
-              text:
-                `RED TEAM MAX error: ${
-                  error instanceof Error
-                    ? error.message
-                    : String(error)
-                }`
-            }
-          ]
-        };
-      }
-    }
-  );
-
-  return server;
+  return {
+    skipped: false,
+    records
+  };
 }
 
-/*
-=========================================================
-CLOUDFLARE WORKER
-=========================================================
-*/
+/* =========================================================
+   EUROPE PMC
+   ========================================================= */
 
-export default {
-  fetch(request, env, ctx) {
-    const handler =
-      createMcpHandler(() => createServer(env));
+async function searchEuropePMC(query, limit) {
+  const params = new URLSearchParams({
+    query,
+    format: "json",
+    resultType: "core",
+    pageSize: String(
+      Math.min(limit, 1000)
+    )
+  });
 
-    return handler(request, env, ctx);
+  const response = await fetch(
+    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?${params.toString()}`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Europe PMC ${response.status}: ${await response.text()}`
+    );
   }
-};
+
+  const data = await response.json();
+
+  return (
+    data?.resultList?.result || []
+  ).map((item) =>
+    makeRecord({
+      source: "Europe PMC",
+      id: item.id,
+      title: item.title,
+      abstract: item.abstractText,
+      authors:
+        item.authorList?.author?.map(
+          (a) =>
+            a.fullName ||
+            [
+              a.firstName,
+              a.lastName
+            ]
+              .filter(Boolean)
+              .join(" ")
+        ) || [],
+      year:
+        item.pubYear ||
+        item.firstPublicationDate,
+      venue:
+        item.journalTitle ||
+        item.journalInfo?.journal
+          ?.title ||
+        "",
+      doi: item.doi,
+      pmid:
+        item.pmid ||
+        (item.source === "MED"
+          ? item.id
+          : ""),
+      url:
+        item.doi
+          ? `https://doi.org/${normalizeDoi(
+              item.doi
+            )}`
+          : "",
+      citationCount:
+        item.citedByCount
+    })
+  );
+}
+
+/* =========================================================
+   PUBMED / NCBI
+   ========================================================= */
+
+async function searchPubMed(env, query, limit) {
+  const searchParams =
+    new URLSearchParams({
+      db: "pubmed",
+      term: query,
+      retmode: "json",
+      retmax: String(
+        Math.min(limit, 200)
+      )
+    });
+
+  if (env.NCBI_API_KEY) {
+    searchParams.set(
+      "api_key",
+      env.NCBI_API_KEY
+    );
+  }
+
+  const searchResponse = await fetch(
+    `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?${searchParams.toString()}`
+  );
+
+  if (!searchResponse.ok) {
+    throw new Error(
+      `PubMed ESearch ${searchResponse.status}: ${await searchResponse.text()}`
+    );
+  }
+
+  const searchData =
+    await searchResponse.json();
+
+  const ids =
+    searchData?.esearchresult?.idlist ||
+    [];
+
+  if (!ids.length) {
+    return [];
+  }
+
+  const fetchParams =
+    new URLSearchParams({
+      db: "pubmed",
+      id: ids.join(","),
+      retmode: "xml"
+    });
+
+  if (env.NCBI_API_KEY) {
+    fetchParams.set(
+      "api_key",
+      env.NCBI_API_KEY
+    );
+  }
+
+  const fetchResponse = await fetch(
+    `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?${fetchParams.toString()}`
+  );
+
+  if (!fetchResponse.ok) {
+    throw new Error(
+      `PubMed EFetch ${fetchResponse.status}: ${await fetchResponse.text()}`
+    );
+  }
+
+  const xml = await fetchResponse.text();
+
+  /*
+    Cloudflare Workers has DOMParser in many runtimes,
+    but to avoid relying on browser DOM APIs here,
+    use conservative XML extraction for the fields
+    required by TRT.
+  */
+
+  const articles =
+    xml.match(
+      /<PubmedArticle>[\s\S]*?<\/PubmedArticle>/g
+    ) || [];
+
+  return articles.map((block) => {
+    const extract = (tag) => {
+      const match = block.match(
+        new RegExp(
+          `<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`,
+          "i"
+        )
+      );
+
+      return match
+        ? cleanText(match[1])
+        : "";
+    };
+
+    const title =
+      extract("ArticleTitle");
+
+    const abstractParts = [];
+
+    const abstractRegex =
+      /<AbstractText[^>]*>([\s\S]*?)<\/AbstractText>/gi;
+
+    let abstractMatch;
+
+    while (
+      (abstractMatch =
+        abstractRegex.exec(block))
+    ) {
+      abstractParts.push(
+        cleanText(abstractMatch[1])
+      );
+    }
+
+    const authorBlocks =
+      block.match(
+        /<Author[^>]*>[\s\S]*?<\/Author>/gi
+      ) || [];
+
+    const authors = authorBlocks
+      .map((authorBlock) => {
+        const last =
+          authorBlock.match(
+            /<LastName>([\s\S]*?)<\/LastName>/i
+          )?.[1] || "";
+
+        const fore =
+          authorBlock.match(
+            /<ForeName>([\s\S]*?)<\/ForeName>/i
+          )?.[1] || "";
+
+        return cleanText(
+          `${fore} ${last}`
+        );
+      })
+      .filter(Boolean);
+
+    const pmid =
+      block.match(
+        /<PMID[^>]*>([\s\S]*?)<\/PMID>/i
+      )?.[1] || "";
+
+    const doi =
+      block.match(
+        /<ArticleId[^>]*IdType=["']doi["'][^>]*>([\s\S]*?)<\/ArticleId>/i
+      )?.[1] || "";
+
+    const year =
+      block.match(
+        /<PubDate>[\s\S]*?<Year>(\d{4})<\/Year>[\s\S]*?<\/PubDate>/i
+      )?.[1] ||
+      block.match(
+        /<ArticleDate[^>]*>[\s\S]*?<Year>(\d{4})<\/Year>/i
+      )?.[1] ||
+      null;
+
+    const journal =
+      block.match(
+        /<Journal>[\s\S]*?<Title>([\s\S]*?)<\/Title>[\s\S]*?<\/Journal>/i
+      )?.[1] || "";
+
+    return makeRecord({
+      source: "PubMed",
+      id: pmid,
+      title,
+      abstract:
+        abstractParts.join(" "),
+      authors,
+      year,
+      venue: journal,
+      doi,
+      pmid,
+      url: pmid
+        ? `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`
+        : ""
+    });
+  });
+}
+
+/* =========================================================
+   CROSSREF
+   ========================================================= */
+
+async function searchCrossref(
+  query,
+  limit
+) {
+  const params = new URLSearchParams({
+    query,
+    rows: String(
+      Math.min(limit, 200)
+    )
+  });
+
+  const response = await fetch(
+    `https://api.crossref.org/works?${params.toString()}`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Crossref ${response.status}: ${await response.text()}`
+    );
+  }
+
+  const data = await response.json();
+
+  return (
+    data?.message?.items || []
+  ).map((item) => {
+    const authors =
+      (item.author || []).map((a) =>
+        cleanText(
+          [a.given, a.family]
+            .filter(Boolean)
+            .join(" ")
+        )
+      );
+
+    const dateParts =
+      item?.published?.["date-parts"]?.[0] ||
+      item?.["published-print"]?.[
+        "date-parts"
+      ]?.[0] ||
+      item?.["published-online"]?.[
+        "date-parts"
+      ]?.[0] ||
+      [];
+
+    return makeRecord({
+      source: "Crossref",
+      id: item.DOI,
+      title: first(item.title) || "",
+      abstract: item.abstract || "",
+      authors,
+      year: dateParts[0],
+      venue:
+        first(
+          item["container-title"]
+        ) || "",
+      doi: item.DOI,
+      url:
+        item.URL ||
+        (item.DOI
+          ? `https://doi.org/${normalizeDoi(
+              item.DOI
+            )}`
+          : ""),
+      citationCount:
+        item[
+          "is-referenced-by-count"
+        ]
+    });
+  });
+}
+
+/* =========================================================
+   NVIDIA NEMOTRON
+   ========================================================= */
+
+async function callNemotron(
+  env,
+  systemPrompt,
+  userPrompt,
+  maxTokens = 1800
+) {
+  if (!env.NVIDIA_API_KEY) {
+    throw new Error(
+      "NVIDIA_API_KEY missing."
+    );
+  }
+
+  const response = await fetch(
+    NVIDIA_URL,
+    {
+      method: "POST",
+
+      headers: {
+        Authorization:
+          `Bearer ${env.NVIDIA_API_KEY}`,
+        "Content-Type":
+          "application/json",
