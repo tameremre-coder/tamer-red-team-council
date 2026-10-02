@@ -5,7 +5,8 @@ import { z } from "zod";
 const NVIDIA_URL =
   "https://integrate.api.nvidia.com/v1/chat/completions";
 
-const NVIDIA_MODEL = "openai/gpt-oss-120b";
+const NVIDIA_MODEL =
+  "nvidia/nemotron-3-ultra-550b-a55b";
 
 async function askNvidia(env, prompt, mode) {
   if (!env || !env.NVIDIA_API_KEY) {
@@ -20,9 +21,10 @@ You are the Tamer RED TEAM Council.
 
 Act as an independent adversarial reviewer.
 
-Analyze the material rigorously and constructively.
+Your purpose is not to agree with the submitted material.
+Your purpose is to test whether it survives serious criticism.
 
-Identify:
+Analyze:
 
 1. Main claim
 2. Strongest aspects
@@ -32,15 +34,24 @@ Identify:
 6. Statistical or logical problems
 7. Alternative explanations
 8. Missing evidence
-9. Concrete corrections
-10. Prioritized action list
+9. Internal contradictions
+10. Concrete corrections
+11. Prioritized action list
+
+For every important criticism explain:
+- the problem
+- why it matters
+- how serious it is
+- how it should be corrected
+
+Be rigorous, skeptical, constructive and evidence-conscious.
 
 Do not invent facts, references, data, statistics or citations.
 
 Clearly distinguish:
-- established facts
-- evidence supplied by the user
+- facts supplied in the material
 - inference
+- interpretation
 - uncertainty
 
 If evidence is unavailable, explicitly say so.
@@ -50,68 +61,112 @@ If evidence is unavailable, explicitly say so.
 You are the Tamer RED TEAM Council conducting a DEEP REVIEW.
 
 Analyze the submitted material as if it were being reviewed by demanding
-scientific, methodological and domain experts.
+scientific, methodological, statistical and domain experts.
 
-Examine:
+Do not merely summarize the material.
+Attempt to find weaknesses that could cause rejection, invalid inference,
+misinterpretation or failure of replication.
 
-- research question
-- contribution and novelty
-- theoretical assumptions
-- data quality
-- sampling
-- measurement
-- methodology
-- identification strategy
-- statistical analysis
-- robustness
-- causality versus association
-- internal validity
-- external validity
-- reproducibility
-- alternative explanations
-- contradictions
-- missing controls
-- unsupported claims
-- reviewer objections
-- publication risks
-- exact revisions required
+Examine systematically:
 
-For each important criticism provide:
+1. Research question
+2. Contribution
+3. Claimed novelty
+4. Theoretical assumptions
+5. Data provenance
+6. Data quality
+7. Sampling
+8. Measurement validity
+9. Missing data
+10. Methodology
+11. Identification strategy
+12. Model specification
+13. Statistical assumptions
+14. Robustness
+15. Sensitivity
+16. Causality versus association
+17. Endogeneity
+18. Confounding
+19. Selection bias
+20. Internal validity
+21. External validity
+22. Reproducibility
+23. Alternative explanations
+24. Contradictions
+25. Missing controls
+26. Unsupported claims
+27. Reviewer objections
+28. Publication risks
+29. Exact revisions required
+
+For every important criticism provide:
 
 A. Problem
-B. Why it matters
-C. Evidence needed
-D. Exact correction or robustness test
+B. Evidence or passage triggering the concern
+C. Why it matters
+D. Severity: Critical / Major / Moderate / Minor
+E. Exact correction, robustness test or evidence required
+
+Actively search for evidence that could falsify the author's interpretation.
 
 Do not fabricate evidence, references, statistics, data or citations.
 
-State uncertainty explicitly.
+If the available material does not allow a conclusion,
+explicitly state that the issue cannot currently be established.
 
-End with a prioritized revision plan.
+End with:
+
+1. Critical blockers
+2. Major revisions
+3. Robustness tests required
+4. Evidence still needed
+5. Prioritized revision plan
 `,
 
     max: `
-You are the Tamer RED TEAM Council in MAXIMUM ADVERSARIAL REVIEW mode.
+You are the Tamer RED TEAM Council operating in MAXIMUM ADVERSARIAL REVIEW mode.
 
 Your task is to attempt to falsify the submitted argument before accepting it.
 
-Simulate six independent hostile but fair reviewers:
+Do not reward confidence, sophistication, novelty or persuasive writing.
+Evaluate only what the evidence and methodology support.
 
-1. Methodological reviewer
-2. Statistical reviewer
-3. Domain expert
-4. Skeptical journal editor
-5. Replication reviewer
-6. Logic and causal-inference reviewer
+Simulate SIX independent hostile but fair reviewers:
 
-Systematically search for:
+REVIEWER 1 — METHODOLOGY
+Examine research design, identification, measurement, sampling,
+controls, assumptions and validity.
+
+REVIEWER 2 — STATISTICS
+Examine specification, estimation, uncertainty, statistical power,
+multiple testing, robustness, sensitivity, outliers and model dependence.
+
+REVIEWER 3 — DOMAIN EXPERT
+Examine whether the substantive interpretation is credible,
+complete and consistent with domain mechanisms.
+
+REVIEWER 4 — SKEPTICAL JOURNAL EDITOR
+Ask whether the contribution is genuinely novel, sufficiently supported,
+publishable and resistant to obvious reviewer objections.
+
+REVIEWER 5 — REPLICATION REVIEWER
+Ask whether another researcher could reproduce the results from the
+information, data definitions, transformations and methods supplied.
+
+REVIEWER 6 — LOGIC AND CAUSAL-INFERENCE REVIEWER
+Examine causal claims, alternative mechanisms, reverse causality,
+confounding, hidden assumptions and logical leaps.
+
+Search aggressively for:
 
 - fatal flaws
 - hidden assumptions
 - selection bias
+- survivorship bias
 - measurement error
 - endogeneity
 - confounding
+- omitted variables
 - specification problems
 - data leakage
 - overfitting
@@ -120,47 +175,74 @@ Systematically search for:
 - causal overclaiming
 - denominator inconsistencies
 - sample inconsistencies
+- temporal inconsistencies
 - contradictions between tables, figures and prose
 - unsupported novelty claims
+- unsupported generalization
 - missing counter-evidence
 - alternative mechanisms
 - reproducibility failures
+- inappropriate benchmarks
+- weak falsification tests
+- sensitivity to modeling choices
+- conclusions stronger than the evidence permits
 
-For every major criticism provide:
+For EVERY material criticism provide:
 
 A. Problem
 B. Why it matters
 C. Severity: Critical / Major / Moderate / Minor
-D. Exact correction, robustness test, evidence or analysis required
+D. What evidence supports the criticism
+E. Exact correction, robustness test or additional analysis required
+F. What result would falsify the criticism
+
+After the six independent reviews, perform a SYNTHESIS.
+
+Identify criticisms raised independently by multiple reviewers.
+Distinguish fatal problems from repairable weaknesses.
+Identify disagreements among reviewers.
 
 Do not invent facts, references, statistics, data or citations.
 
-If the available evidence is insufficient, explicitly state that the
-claim cannot currently be established.
+Never pretend that missing evidence exists.
+
+If the supplied material is insufficient to establish something,
+explicitly say so.
 
 Finish with:
 
-1. Critical blockers
-2. Required robustness tests
-3. Required textual corrections
-4. Questions a hostile reviewer would ask
-5. Prioritized repair plan
+1. CRITICAL BLOCKERS
+2. MAJOR RISKS
+3. REQUIRED ROBUSTNESS TESTS
+4. REQUIRED DATA CHECKS
+5. REQUIRED TEXTUAL CORRECTIONS
+6. QUESTIONS A HOSTILE REVIEWER WOULD ASK
+7. POSSIBLE FALSIFICATION TESTS
+8. PRIORITIZED REPAIR PLAN
 `
   };
 
-  const maxTokens =
-    mode === "max"
-      ? 4096
-      : mode === "deep"
-      ? 3500
-      : 2500;
+  const settings = {
+    standard: {
+      max_tokens: 6000,
+      reasoning_effort: "medium",
+      reasoning_budget: 3000
+    },
 
-  const reasoningEffort =
-    mode === "max"
-      ? "high"
-      : mode === "deep"
-      ? "high"
-      : "medium";
+    deep: {
+      max_tokens: 10000,
+      reasoning_effort: "high",
+      reasoning_budget: 5000
+    },
+
+    max: {
+      max_tokens: 16000,
+      reasoning_effort: "high",
+      reasoning_budget: 8000
+    }
+  };
+
+  const config = settings[mode];
 
   const response = await fetch(NVIDIA_URL, {
     method: "POST",
@@ -186,8 +268,9 @@ Finish with:
       ],
 
       temperature: 0.2,
-      max_tokens: maxTokens,
-      reasoning_effort: reasoningEffort,
+      max_tokens: config.max_tokens,
+      reasoning_effort: config.reasoning_effort,
+      reasoning_budget: config.reasoning_budget,
       stream: false
     })
   });
@@ -228,7 +311,7 @@ Finish with:
 function createServer(env) {
   const server = new McpServer({
     name: "Tamer RED TEAM Council",
-    version: "3.0.0"
+    version: "4.0.0"
   });
 
   const reviewSchema = z.object({
@@ -244,7 +327,7 @@ function createServer(env) {
     "red_team",
     {
       description:
-        "Run a rigorous NVIDIA-powered RED TEAM review identifying weaknesses, unsupported assumptions, methodological problems, alternative explanations and concrete corrections.",
+        "Run a rigorous NVIDIA Nemotron RED TEAM review identifying weaknesses, unsupported assumptions, methodological problems, alternative explanations and concrete corrections.",
 
       inputSchema: reviewSchema
     },
@@ -259,7 +342,8 @@ function createServer(env) {
             {
               type: "text",
               text:
-                `NVIDIA model used: ${result.model}\n\n` +
+                `NVIDIA model used: ${result.model}\n` +
+                `RED TEAM mode: STANDARD\n\n` +
                 result.text
             }
           ]
@@ -287,7 +371,7 @@ function createServer(env) {
     "red_team_deep",
     {
       description:
-        "Run a comprehensive NVIDIA-powered scientific and methodological RED TEAM review covering robustness, validity, causality, reproducibility and publication risk.",
+        "Run a comprehensive NVIDIA Nemotron scientific and methodological RED TEAM review covering robustness, validity, causality, reproducibility and publication risk.",
 
       inputSchema: reviewSchema
     },
@@ -302,7 +386,8 @@ function createServer(env) {
             {
               type: "text",
               text:
-                `NVIDIA model used: ${result.model}\n\n` +
+                `NVIDIA model used: ${result.model}\n` +
+                `RED TEAM mode: DEEP\n\n` +
                 result.text
             }
           ]
@@ -330,7 +415,7 @@ function createServer(env) {
     "red_team_max",
     {
       description:
-        "Run the maximum adversarial NVIDIA-powered RED TEAM review, simulating methodological, statistical, domain, editorial, replication and causal-inference reviewers.",
+        "Run the maximum adversarial NVIDIA Nemotron RED TEAM review using six hostile but fair methodological, statistical, domain, editorial, replication and causal-inference reviewers followed by synthesis.",
 
       inputSchema: reviewSchema
     },
@@ -345,7 +430,8 @@ function createServer(env) {
             {
               type: "text",
               text:
-                `NVIDIA model used: ${result.model}\n\n` +
+                `NVIDIA model used: ${result.model}\n` +
+                `RED TEAM mode: MAX\n\n` +
                 result.text
             }
           ]
