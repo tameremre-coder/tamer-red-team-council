@@ -2,64 +2,17 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 
-const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
+const NVIDIA_URL =
+  "https://integrate.api.nvidia.com/v1/chat/completions";
 
-async function getModels(env) {
-  if (!env || !env.NVIDIA_API_KEY) {
-    throw new Error("NVIDIA_API_KEY secret is missing or unavailable.");
-  }
-
-  const response = await fetch(`${NVIDIA_BASE}/models`, {
-    headers: {
-      Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
-      Accept: "application/json"
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `NVIDIA models error ${response.status}: ${await response.text()}`
-    );
-  }
-
-  const data = await response.json();
-  return data.data || [];
-}
-
-function chooseModel(models) {
-  const ids = models.map((m) => m.id).filter(Boolean);
-
-  const preferences = [
-    "nemotron",
-    "llama-3.3-70b",
-    "llama-3.1-70b",
-    "qwen"
-  ];
-
-  for (const preference of preferences) {
-    const found = ids.find((id) =>
-      id.toLowerCase().includes(preference.toLowerCase())
-    );
-
-    if (found) {
-      return found;
-    }
-  }
-
-  if (!ids.length) {
-    throw new Error("NVIDIA API returned no available models.");
-  }
-
-  return ids[0];
-}
+const NVIDIA_MODEL = "openai/gpt-oss-120b";
 
 async function askNvidia(env, prompt, mode) {
   if (!env || !env.NVIDIA_API_KEY) {
-    throw new Error("NVIDIA_API_KEY secret is missing or unavailable.");
+    throw new Error(
+      "NVIDIA_API_KEY secret is missing or unavailable."
+    );
   }
-
-  const models = await getModels(env);
-  const model = chooseModel(models);
 
   const instructions = {
     standard: `
@@ -67,7 +20,10 @@ You are the Tamer RED TEAM Council.
 
 Act as an independent adversarial reviewer.
 
+Analyze the material rigorously and constructively.
+
 Identify:
+
 1. Main claim
 2. Strongest aspects
 3. Critical weaknesses
@@ -77,13 +33,17 @@ Identify:
 7. Alternative explanations
 8. Missing evidence
 9. Concrete corrections
-10. Final prioritized action list
-
-Be rigorous, constructive, skeptical and evidence-conscious.
+10. Prioritized action list
 
 Do not invent facts, references, data, statistics or citations.
-Clearly distinguish established facts from inference.
-If evidence is unavailable, explicitly state that it is unavailable.
+
+Clearly distinguish:
+- established facts
+- evidence supplied by the user
+- inference
+- uncertainty
+
+If evidence is unavailable, explicitly say so.
 `,
 
     deep: `
@@ -94,9 +54,12 @@ scientific, methodological and domain experts.
 
 Examine:
 
-- research question and contribution
+- research question
+- contribution and novelty
 - theoretical assumptions
 - data quality
+- sampling
+- measurement
 - methodology
 - identification strategy
 - statistical analysis
@@ -113,15 +76,16 @@ Examine:
 - publication risks
 - exact revisions required
 
+For each important criticism provide:
+
+A. Problem
+B. Why it matters
+C. Evidence needed
+D. Exact correction or robustness test
+
 Do not fabricate evidence, references, statistics, data or citations.
 
 State uncertainty explicitly.
-
-For important criticisms explain:
-A. The problem
-B. Why it matters
-C. What evidence would resolve it
-D. The exact correction or test required
 
 End with a prioritized revision plan.
 `,
@@ -131,7 +95,7 @@ You are the Tamer RED TEAM Council in MAXIMUM ADVERSARIAL REVIEW mode.
 
 Your task is to attempt to falsify the submitted argument before accepting it.
 
-Simulate multiple hostile but fair reviewers:
+Simulate six independent hostile but fair reviewers:
 
 1. Methodological reviewer
 2. Statistical reviewer
@@ -140,7 +104,7 @@ Simulate multiple hostile but fair reviewers:
 5. Replication reviewer
 6. Logic and causal-inference reviewer
 
-Search systematically for:
+Systematically search for:
 
 - fatal flaws
 - hidden assumptions
@@ -171,8 +135,8 @@ D. Exact correction, robustness test, evidence or analysis required
 
 Do not invent facts, references, statistics, data or citations.
 
-If the available material is insufficient to establish something,
-explicitly state that it cannot be established.
+If the available evidence is insufficient, explicitly state that the
+claim cannot currently be established.
 
 Finish with:
 
@@ -184,15 +148,32 @@ Finish with:
 `
   };
 
-  const response = await fetch(`${NVIDIA_BASE}/chat/completions`, {
+  const maxTokens =
+    mode === "max"
+      ? 4096
+      : mode === "deep"
+      ? 3500
+      : 2500;
+
+  const reasoningEffort =
+    mode === "max"
+      ? "high"
+      : mode === "deep"
+      ? "high"
+      : "medium";
+
+  const response = await fetch(NVIDIA_URL, {
     method: "POST",
+
     headers: {
       Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
       "Content-Type": "application/json",
       Accept: "application/json"
     },
+
     body: JSON.stringify({
-      model,
+      model: NVIDIA_MODEL,
+
       messages: [
         {
           role: "system",
@@ -203,45 +184,51 @@ Finish with:
           content: prompt
         }
       ],
-      temperature: mode === "max" ? 0.1 : 0.2,
-      max_tokens:
-        mode === "max"
-          ? 6000
-          : mode === "deep"
-          ? 4000
-          : 2500,
+
+      temperature: 0.2,
+      max_tokens: maxTokens,
+      reasoning_effort: reasoningEffort,
       stream: false
     })
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
+  const responseText = await response.text();
 
+  if (!response.ok) {
     throw new Error(
-      `NVIDIA inference error ${response.status}: ${errorText}`
+      `NVIDIA inference error ${response.status}: ${responseText}`
     );
   }
 
-  const data = await response.json();
+  let data;
 
-  const text = data?.choices?.[0]?.message?.content;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    throw new Error(
+      `NVIDIA returned invalid JSON: ${responseText}`
+    );
+  }
+
+  const text =
+    data?.choices?.[0]?.message?.content;
 
   if (!text) {
     throw new Error(
-      `NVIDIA returned no response text. Model used: ${model}`
+      `NVIDIA returned no response text. Raw response: ${responseText}`
     );
   }
 
   return {
     text,
-    model
+    model: NVIDIA_MODEL
   };
 }
 
 function createServer(env) {
   const server = new McpServer({
     name: "Tamer RED TEAM Council",
-    version: "2.0.0"
+    version: "3.0.0"
   });
 
   const reviewSchema = z.object({
@@ -249,7 +236,7 @@ function createServer(env) {
       .string()
       .min(1)
       .describe(
-        "The paper, argument, analysis, methodology, results, draft, proposal, claim, or other material to review."
+        "The paper, argument, claim, analysis, methodology, results, draft, proposal or other material to review."
       )
   });
 
@@ -257,12 +244,15 @@ function createServer(env) {
     "red_team",
     {
       description:
-        "Run a rigorous NVIDIA-powered RED TEAM review. Identify weaknesses, unsupported assumptions, methodological problems, alternative explanations and concrete corrections.",
+        "Run a rigorous NVIDIA-powered RED TEAM review identifying weaknesses, unsupported assumptions, methodological problems, alternative explanations and concrete corrections.",
+
       inputSchema: reviewSchema
     },
+
     async ({ text }) => {
       try {
-        const result = await askNvidia(env, text, "standard");
+        const result =
+          await askNvidia(env, text, "standard");
 
         return {
           content: [
@@ -280,11 +270,12 @@ function createServer(env) {
           content: [
             {
               type: "text",
-              text: `RED TEAM error: ${
-                error instanceof Error
-                  ? error.message
-                  : String(error)
-              }`
+              text:
+                `RED TEAM error: ${
+                  error instanceof Error
+                    ? error.message
+                    : String(error)
+                }`
             }
           ]
         };
@@ -296,12 +287,15 @@ function createServer(env) {
     "red_team_deep",
     {
       description:
-        "Run a comprehensive NVIDIA-powered scientific and methodological RED TEAM review including robustness, validity, causality, reproducibility and publication-risk analysis.",
+        "Run a comprehensive NVIDIA-powered scientific and methodological RED TEAM review covering robustness, validity, causality, reproducibility and publication risk.",
+
       inputSchema: reviewSchema
     },
+
     async ({ text }) => {
       try {
-        const result = await askNvidia(env, text, "deep");
+        const result =
+          await askNvidia(env, text, "deep");
 
         return {
           content: [
@@ -319,11 +313,12 @@ function createServer(env) {
           content: [
             {
               type: "text",
-              text: `RED TEAM DEEP error: ${
-                error instanceof Error
-                  ? error.message
-                  : String(error)
-              }`
+              text:
+                `RED TEAM DEEP error: ${
+                  error instanceof Error
+                    ? error.message
+                    : String(error)
+                }`
             }
           ]
         };
@@ -335,12 +330,15 @@ function createServer(env) {
     "red_team_max",
     {
       description:
-        "Run the maximum adversarial NVIDIA-powered RED TEAM review, simulating hostile but fair methodological, statistical, domain, editorial, replication and causal-inference reviewers.",
+        "Run the maximum adversarial NVIDIA-powered RED TEAM review, simulating methodological, statistical, domain, editorial, replication and causal-inference reviewers.",
+
       inputSchema: reviewSchema
     },
+
     async ({ text }) => {
       try {
-        const result = await askNvidia(env, text, "max");
+        const result =
+          await askNvidia(env, text, "max");
 
         return {
           content: [
@@ -358,11 +356,12 @@ function createServer(env) {
           content: [
             {
               type: "text",
-              text: `RED TEAM MAX error: ${
-                error instanceof Error
-                  ? error.message
-                  : String(error)
-              }`
+              text:
+                `RED TEAM MAX error: ${
+                  error instanceof Error
+                    ? error.message
+                    : String(error)
+                }`
             }
           ]
         };
@@ -375,7 +374,9 @@ function createServer(env) {
 
 export default {
   fetch(request, env, ctx) {
-    const handler = createMcpHandler(() => createServer(env));
+    const handler =
+      createMcpHandler(() => createServer(env));
+
     return handler(request, env, ctx);
   }
 };
