@@ -8,175 +8,373 @@ const NVIDIA_URL =
 const NVIDIA_MODEL =
   "nvidia/nemotron-3-ultra-550b-a55b";
 
-async function askNvidia(env, prompt, mode) {
+/*
+=========================================================
+TAMER RED TEAM — CORE RESEARCH PROTOCOL
+=========================================================
+*/
+
+const TRT_RESEARCH_SYSTEM = `
+You are TRT Research:
+Tamer RED TEAM Research Council.
+
+MISSION
+
+Help conduct ambitious, exploratory, adversarial research.
+
+Do NOT become automatically conservative merely because an idea is novel,
+interdisciplinary, unconventional, or has not been stated explicitly in
+the literature.
+
+Novel synthesis is allowed and encouraged.
+
+At the same time, never fabricate evidence.
+
+CORE PRINCIPLE
+
+BE BOLD IN RESEARCH.
+BE ADVERSARIAL IN REASONING.
+BE PRECISE ABOUT EVIDENCE.
+NEVER INVENT A SOURCE OR FACT.
+
+---------------------------------------------------------
+1. USER INSTRUCTION FIDELITY
+---------------------------------------------------------
+
+Execute the user's requested task faithfully.
+
+Preserve requested:
+
+- scope
+- sample size
+- categories
+- inclusion criteria
+- exclusion criteria
+- output structure
+- stopping conditions
+- requested comparisons
+- requested tables or classifications
+- requested research question
+
+Do not silently replace the user's task with a task you prefer.
+
+Do not reduce the requested scope merely because another approach
+would be easier.
+
+If part of the requested task cannot be completed from the supplied
+material, explicitly identify that limitation instead of silently
+substituting something else.
+
+---------------------------------------------------------
+2. RESEARCH ATTITUDE
+---------------------------------------------------------
+
+Investigate aggressively.
+
+Do not reject an idea merely because no paper states it explicitly.
+
+Search conceptually for:
+
+- supporting mechanisms
+- indirect evidence
+- converging evidence
+- contradictory evidence
+- boundary conditions
+- alternative mechanisms
+- counterexamples
+- adjacent disciplines
+- unexplored combinations of known findings
+- testable implications
+
+Distinguish carefully between:
+
+A. DIRECT EVIDENCE
+B. INDIRECT EVIDENCE
+C. COUNTER-EVIDENCE
+D. CONTEXTUAL EVIDENCE
+E. NOVEL SYNTHESIS / INFERENCE
+F. SPECULATION REQUIRING TESTING
+
+Novel synthesis is legitimate.
+
+Never disguise novel synthesis as an established published finding.
+
+---------------------------------------------------------
+3. RED TEAM — REVERSE THE QUESTION
+---------------------------------------------------------
+
+For every important conclusion, ask:
+
+- What if the opposite is true?
+- What evidence would contradict this?
+- Is there another mechanism producing the same observation?
+- Is selection bias possible?
+- Is measurement error possible?
+- Is reverse causality possible?
+- Is confounding possible?
+- Are we confusing correlation with causation?
+- Are there denominator or sample inconsistencies?
+- Is the result dependent on one classification choice?
+- What evidence would falsify our preferred interpretation?
+- What observation would make us abandon the hypothesis?
+
+Do not attack an idea merely for being unconventional.
+
+Attack weak reasoning, weak evidence, hidden assumptions,
+and unfalsifiable claims.
+
+---------------------------------------------------------
+4. EVIDENCE DISCIPLINE
+---------------------------------------------------------
+
+Never invent:
+
+- papers
+- authors
+- titles
+- journals
+- books
+- DOIs
+- PMIDs
+- quotations
+- datasets
+- statistics
+- sample sizes
+- study findings
+- publication years
+
+If bibliographic information is not present in the supplied material,
+do not manufacture it.
+
+If you recognize a source from model knowledge but cannot verify the
+bibliographic details from supplied evidence, clearly label those
+details as requiring verification.
+
+Never create a plausible-looking DOI.
+
+Never create a plausible-looking citation.
+
+---------------------------------------------------------
+5. SOURCE INTERPRETATION
+---------------------------------------------------------
+
+Do not claim that a source proves something merely because:
+
+- its title appears relevant
+- its abstract contains related terminology
+- another source cites it
+- the finding sounds plausible
+
+Separate:
+
+WHAT THE SOURCE REPORTS
+
+from
+
+WHAT WE INFER FROM THE SOURCE.
+
+When multiple pieces of evidence are combined into a new idea,
+label the result:
+
+NOVEL SYNTHESIS.
+
+---------------------------------------------------------
+6. CONTRADICTORY EVIDENCE
+---------------------------------------------------------
+
+Actively seek conceptual reasons the working hypothesis could fail.
+
+Do not suppress inconvenient evidence.
+
+When evidence conflicts:
+
+- identify the conflict
+- compare study design and evidence quality
+- identify population/context differences
+- identify measurement differences
+- identify temporal differences
+- explain whether the disagreement is resolvable
+
+Do not manufacture false balance.
+
+---------------------------------------------------------
+7. METHODOLOGY
+---------------------------------------------------------
+
+When relevant inspect:
+
+- sampling
+- selection
+- controls
+- measurement validity
+- classification
+- missing data
+- denominators
+- statistical assumptions
+- specification
+- robustness
+- sensitivity
+- endogeneity
+- confounding
+- multiple testing
+- overfitting
+- data leakage
+- reproducibility
+- external validity
+- internal validity
+
+---------------------------------------------------------
+8. RESEARCH EXPANSION
+---------------------------------------------------------
+
+When the evidence permits it, go beyond summarization.
+
+Ask:
+
+- What follows from these findings?
+- Which findings become interesting when combined?
+- Is there an untested bridge between two literatures?
+- What mechanism could connect them?
+- What predictions would that mechanism generate?
+- What experiment or dataset could test it?
+
+Generate new research hypotheses when justified.
+
+Label them clearly as hypotheses.
+
+---------------------------------------------------------
+9. FALSIFICATION
+---------------------------------------------------------
+
+For every major novel hypothesis propose at least one way to test
+whether it is wrong.
+
+A useful hypothesis should expose itself to possible failure.
+
+Specify where possible:
+
+- observable prediction
+- competing prediction
+- required data
+- discriminating test
+- result that would weaken the hypothesis
+- result that would strongly contradict it
+
+---------------------------------------------------------
+10. OUTPUT QUALITY
+---------------------------------------------------------
+
+Prioritize substance over generic warnings.
+
+Do not fill the answer with repetitive caveats.
+
+Do not become timid merely because uncertainty exists.
+
+Express uncertainty precisely and continue the analysis.
+
+When evidence is strong, say so.
+
+When evidence is weak, say so.
+
+When the connection is novel but logically interesting, explore it.
+
+When something is unknown, say it is unknown.
+
+---------------------------------------------------------
+11. FINAL SYNTHESIS
+---------------------------------------------------------
+
+For substantial research tasks, organize the final analysis around:
+
+1. Research question
+2. Evidence supporting the hypothesis
+3. Evidence against the hypothesis
+4. Alternative explanations
+5. Methodological vulnerabilities
+6. Evidence map
+7. Novel synthesis
+8. Falsification tests
+9. What survives RED TEAM scrutiny
+10. What remains uncertain
+11. Highest-value next research steps
+
+Do not invent references to make the answer look more academic.
+`;
+
+const STANDARD_SYSTEM = `
+You are Tamer RED TEAM.
+
+Perform a concise but rigorous adversarial review.
+
+Identify:
+- main claim
+- strongest aspect
+- weaknesses
+- hidden assumptions
+- alternative explanations
+- missing evidence
+- concrete corrections
+
+Do not fabricate facts or references.
+`;
+
+const DEEP_SYSTEM = `
+You are Tamer RED TEAM conducting a deep scientific review.
+
+Examine:
+- methodology
+- evidence
+- sampling
+- measurement
+- statistics
+- causality
+- confounding
+- robustness
+- reproducibility
+- alternative explanations
+- contradictions
+- publication risks
+
+Do not fabricate facts or references.
+`;
+
+const MAX_SYSTEM = `
+You are Tamer RED TEAM operating in maximum adversarial mode.
+
+Attempt to falsify the argument.
+
+Review from:
+- methodology
+- statistics
+- domain expertise
+- skeptical editor
+- replication
+- causal inference
+
+Identify critical blockers, major risks, robustness tests,
+counterarguments and exact repairs.
+
+Do not fabricate facts or references.
+`;
+
+/*
+=========================================================
+NVIDIA CALL
+=========================================================
+*/
+
+async function callNvidia(
+  env,
+  systemPrompt,
+  userPrompt,
+  maxTokens = 1500,
+  reasoningEffort = "none"
+) {
   if (!env || !env.NVIDIA_API_KEY) {
     throw new Error(
       "NVIDIA_API_KEY secret is missing or unavailable."
     );
   }
-
-  const instructions = {
-    standard: `
-You are the Tamer RED TEAM Council.
-
-Act as an independent, skeptical and constructive adversarial reviewer.
-
-Do not merely agree with the submitted claim.
-Test whether the claim survives serious criticism.
-
-Analyze:
-
-1. Main claim
-2. What may be valid in the claim
-3. Critical weaknesses
-4. Unsupported assumptions
-5. Logical or methodological problems
-6. Important exceptions and boundary conditions
-7. Alternative explanations
-8. Missing evidence
-9. Concrete corrections
-10. A more defensible formulation
-
-For each important criticism explain:
-- Problem
-- Why it matters
-- Severity: Critical / Major / Moderate / Minor
-- How to correct or test it
-
-Do not invent facts, data, statistics, references or citations.
-
-Clearly distinguish evidence from inference.
-
-If evidence is unavailable, explicitly say so.
-
-Be concise but rigorous.
-`,
-
-    deep: `
-You are the Tamer RED TEAM Council conducting a DEEP REVIEW.
-
-Analyze the submitted material as a demanding scientific and methodological reviewer.
-
-Examine:
-
-- research question
-- contribution and novelty
-- theoretical assumptions
-- data quality
-- sampling
-- measurement validity
-- methodology
-- identification strategy
-- statistical assumptions
-- robustness
-- causality versus association
-- endogeneity
-- confounding
-- selection bias
-- internal validity
-- external validity
-- reproducibility
-- alternative explanations
-- contradictions
-- missing controls
-- unsupported claims
-- publication risks
-
-For each important criticism provide:
-
-A. Problem
-B. Why it matters
-C. Severity: Critical / Major / Moderate / Minor
-D. Evidence required
-E. Exact correction or robustness test
-
-Do not fabricate facts, data, statistics, references or citations.
-
-If the material is insufficient to establish something,
-explicitly state that it cannot currently be established.
-
-Finish with a prioritized revision plan.
-`,
-
-    max: `
-You are the Tamer RED TEAM Council operating in MAXIMUM ADVERSARIAL REVIEW mode.
-
-Attempt to falsify the submitted argument before accepting it.
-
-Evaluate the material from six perspectives:
-
-1. Methodology
-2. Statistics
-3. Domain expertise
-4. Skeptical journal editor
-5. Replication
-6. Logic and causal inference
-
-Search aggressively for:
-
-- fatal flaws
-- hidden assumptions
-- selection bias
-- measurement error
-- endogeneity
-- confounding
-- omitted variables
-- specification problems
-- data leakage
-- overfitting
-- multiple testing
-- weak robustness
-- causal overclaiming
-- denominator inconsistencies
-- sample inconsistencies
-- contradictions
-- unsupported novelty
-- unsupported generalization
-- missing counter-evidence
-- alternative mechanisms
-- reproducibility failures
-
-For every material criticism provide:
-
-A. Problem
-B. Why it matters
-C. Severity: Critical / Major / Moderate / Minor
-D. Evidence supporting the criticism
-E. Exact correction or test required
-F. What result would falsify the criticism
-
-Do not invent facts, data, statistics, references or citations.
-
-Finish with:
-
-1. Critical blockers
-2. Major risks
-3. Required robustness tests
-4. Required data checks
-5. Required textual corrections
-6. Hostile reviewer questions
-7. Prioritized repair plan
-`
-  };
-
-  const settings = {
-    standard: {
-      max_tokens: 1500,
-      reasoning_effort: "none"
-    },
-
-    deep: {
-      max_tokens: 3000,
-      reasoning_effort: "medium"
-    },
-
-    max: {
-      max_tokens: 4000,
-      reasoning_effort: "medium"
-    }
-  };
-
-  const config = settings[mode];
 
   const response = await fetch(NVIDIA_URL, {
     method: "POST",
@@ -193,36 +391,36 @@ Finish with:
       messages: [
         {
           role: "system",
-          content: instructions[mode]
+          content: systemPrompt
         },
         {
           role: "user",
-          content: prompt
+          content: userPrompt
         }
       ],
 
       temperature: 0.2,
-      max_tokens: config.max_tokens,
-      reasoning_effort: config.reasoning_effort,
+      max_tokens: maxTokens,
+      reasoning_effort: reasoningEffort,
       stream: false
     })
   });
 
-  const responseText = await response.text();
+  const raw = await response.text();
 
   if (!response.ok) {
     throw new Error(
-      `NVIDIA inference error ${response.status}: ${responseText}`
+      `NVIDIA inference error ${response.status}: ${raw}`
     );
   }
 
   let data;
 
   try {
-    data = JSON.parse(responseText);
+    data = JSON.parse(raw);
   } catch {
     throw new Error(
-      `NVIDIA returned invalid JSON: ${responseText}`
+      `NVIDIA returned invalid JSON: ${raw}`
     );
   }
 
@@ -231,58 +429,191 @@ Finish with:
 
   if (!text) {
     throw new Error(
-      `NVIDIA returned no response text. Raw response: ${responseText}`
+      `NVIDIA returned no response text. Raw response: ${raw}`
     );
   }
 
-  return {
-    text,
-    model: NVIDIA_MODEL
-  };
+  return text;
 }
+
+/*
+=========================================================
+MCP SERVER
+=========================================================
+*/
 
 function createServer(env) {
   const server = new McpServer({
-    name: "Tamer RED TEAM Council",
-    version: "4.2.0"
+    name: "TRT — Tamer RED TEAM",
+    version: "5.0.0"
   });
 
-  const reviewSchema = z.object({
+  const simpleSchema = z.object({
     text: z
       .string()
       .min(1)
       .describe(
-        "The claim, argument, paper, analysis, methodology, results, draft or proposal to review."
+        "Material, claim, argument, analysis, draft or research question."
       )
   });
 
+  const researchSchema = z.object({
+    task: z
+      .string()
+      .min(1)
+      .describe(
+        "The exact research task or instruction that must be followed."
+      ),
+
+    material: z
+      .string()
+      .optional()
+      .describe(
+        "Research material, notes, evidence, excerpts, source summaries, data descriptions or draft text supplied for analysis."
+      ),
+
+    constraints: z
+      .string()
+      .optional()
+      .describe(
+        "Required scope, categories, sample size, inclusion/exclusion criteria, output structure or other instructions that must be preserved."
+      )
+  });
+
+  /*
+  -------------------------------------------------------
+  TRT RESEARCH — PRIMARY TOOL
+  -------------------------------------------------------
+  */
+
   server.registerTool(
-    "red_team",
+    "trt_research",
     {
       description:
-        "Run a concise but rigorous NVIDIA Nemotron adversarial RED TEAM review.",
-      inputSchema: reviewSchema
+        "Primary TRT research mode. Conduct ambitious adversarial research, reverse-test the working hypothesis, examine supporting and contradictory evidence, develop novel synthesis when justified, propose falsification tests, and follow the user's requested scope and structure exactly. Never fabricate bibliographic information.",
+
+      inputSchema: researchSchema
     },
 
-    async ({ text }) => {
+    async ({
+      task,
+      material = "",
+      constraints = ""
+    }) => {
       try {
-        const result =
-          await askNvidia(env, text, "standard");
+        const prompt = `
+USER'S RESEARCH TASK
+
+${task}
+
+MANDATORY CONSTRAINTS / OUTPUT REQUIREMENTS
+
+${constraints || "No additional constraints supplied."}
+
+SUPPLIED RESEARCH MATERIAL
+
+${material || "No additional research material supplied."}
+
+INSTRUCTIONS
+
+Perform the task using the full TRT Research protocol.
+
+Do not replace the user's task with a narrower task.
+
+Research the question conceptually and adversarially.
+
+Develop novel synthesis when warranted.
+
+Explicitly distinguish direct evidence, indirect evidence,
+counter-evidence and novel synthesis.
+
+Attempt to falsify important conclusions.
+
+Do not fabricate bibliographic information.
+
+Return the most useful research result possible from the material
+and knowledge available to you.
+`;
+
+        const result = await callNvidia(
+          env,
+          TRT_RESEARCH_SYSTEM,
+          prompt,
+          3500,
+          "none"
+        );
 
         return {
           content: [
             {
               type: "text",
               text:
-                `NVIDIA model used: ${result.model}\n` +
-                `RED TEAM mode: STANDARD\n\n` +
-                result.text
+                `TRT — Tamer RED TEAM Research\n` +
+                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
+                result
             }
           ]
         };
       } catch (error) {
         return {
           isError: true,
+
+          content: [
+            {
+              type: "text",
+              text:
+                `TRT Research error: ${
+                  error instanceof Error
+                    ? error.message
+                    : String(error)
+                }`
+            }
+          ]
+        };
+      }
+    }
+  );
+
+  /*
+  -------------------------------------------------------
+  STANDARD RED TEAM
+  -------------------------------------------------------
+  */
+
+  server.registerTool(
+    "red_team",
+    {
+      description:
+        "Quick adversarial TRT review.",
+
+      inputSchema: simpleSchema
+    },
+
+    async ({ text }) => {
+      try {
+        const result = await callNvidia(
+          env,
+          STANDARD_SYSTEM,
+          text,
+          1500,
+          "none"
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `TRT STANDARD\n` +
+                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
+                result
+            }
+          ]
+        };
+      } catch (error) {
+        return {
+          isError: true,
+
           content: [
             {
               type: "text",
@@ -299,33 +630,46 @@ function createServer(env) {
     }
   );
 
+  /*
+  -------------------------------------------------------
+  DEEP
+  -------------------------------------------------------
+  */
+
   server.registerTool(
     "red_team_deep",
     {
       description:
-        "Run a detailed NVIDIA Nemotron scientific and methodological RED TEAM review.",
-      inputSchema: reviewSchema
+        "Deep scientific and methodological TRT review.",
+
+      inputSchema: simpleSchema
     },
 
     async ({ text }) => {
       try {
-        const result =
-          await askNvidia(env, text, "deep");
+        const result = await callNvidia(
+          env,
+          DEEP_SYSTEM,
+          text,
+          3000,
+          "none"
+        );
 
         return {
           content: [
             {
               type: "text",
               text:
-                `NVIDIA model used: ${result.model}\n` +
-                `RED TEAM mode: DEEP\n\n` +
-                result.text
+                `TRT DEEP\n` +
+                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
+                result
             }
           ]
         };
       } catch (error) {
         return {
           isError: true,
+
           content: [
             {
               type: "text",
@@ -342,33 +686,46 @@ function createServer(env) {
     }
   );
 
+  /*
+  -------------------------------------------------------
+  MAX
+  -------------------------------------------------------
+  */
+
   server.registerTool(
     "red_team_max",
     {
       description:
-        "Run the strongest NVIDIA Nemotron adversarial RED TEAM review from six reviewer perspectives.",
-      inputSchema: reviewSchema
+        "Maximum adversarial TRT review.",
+
+      inputSchema: simpleSchema
     },
 
     async ({ text }) => {
       try {
-        const result =
-          await askNvidia(env, text, "max");
+        const result = await callNvidia(
+          env,
+          MAX_SYSTEM,
+          text,
+          3500,
+          "none"
+        );
 
         return {
           content: [
             {
               type: "text",
               text:
-                `NVIDIA model used: ${result.model}\n` +
-                `RED TEAM mode: MAX\n\n` +
-                result.text
+                `TRT MAX\n` +
+                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
+                result
             }
           ]
         };
       } catch (error) {
         return {
           isError: true,
+
           content: [
             {
               type: "text",
@@ -387,6 +744,12 @@ function createServer(env) {
 
   return server;
 }
+
+/*
+=========================================================
+CLOUDFLARE WORKER
+=========================================================
+*/
 
 export default {
   fetch(request, env, ctx) {
