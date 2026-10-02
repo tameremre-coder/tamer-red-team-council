@@ -225,20 +225,17 @@ Finish with:
   const settings = {
     standard: {
       max_tokens: 6000,
-      reasoning_effort: "medium",
-      reasoning_budget: 3000
+      reasoning_effort: "medium"
     },
 
     deep: {
       max_tokens: 10000,
-      reasoning_effort: "high",
-      reasoning_budget: 5000
+      reasoning_effort: "high"
     },
 
     max: {
       max_tokens: 16000,
-      reasoning_effort: "high",
-      reasoning_budget: 8000
+      reasoning_effort: "high"
     }
   };
 
@@ -270,7 +267,6 @@ Finish with:
       temperature: 0.2,
       max_tokens: config.max_tokens,
       reasoning_effort: config.reasoning_effort,
-      reasoning_budget: config.reasoning_budget,
       stream: false
     })
   });
@@ -311,7 +307,7 @@ Finish with:
 function createServer(env) {
   const server = new McpServer({
     name: "Tamer RED TEAM Council",
-    version: "4.0.0"
+    version: "4.1.0"
   });
 
   const reviewSchema = z.object({
