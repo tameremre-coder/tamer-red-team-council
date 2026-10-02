@@ -9,12 +9,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
-    "agents": "^0.22.0",
-    "zod": "^3.25.0"
+    "agents": "^0.20.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.105.0"
   }
 }
-
-
