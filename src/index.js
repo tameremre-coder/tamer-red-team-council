@@ -2,11 +2,6 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 
-/* =========================================================
-   TRT RESEARCH v6
-   Academic Research + Adversarial RED TEAM
-   ========================================================= */
-
 const NVIDIA_URL =
   "https://integrate.api.nvidia.com/v1/chat/completions";
 
@@ -14,8 +9,8 @@ const NVIDIA_MODEL =
   "nvidia/nemotron-3-ultra-550b-a55b";
 
 /* =========================================================
-   BASIC HELPERS
-   ========================================================= */
+   HELPERS
+========================================================= */
 
 function cleanText(value = "") {
   return String(value)
@@ -24,205 +19,109 @@ function cleanText(value = "") {
     .trim();
 }
 
-function normalizeDoi(value = "") {
-  return String(value)
-    .trim()
-    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
-    .replace(/^doi:\s*/i, "")
-    .toLowerCase();
-}
-
 function normalizeTitle(value = "") {
   return cleanText(value)
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
     .trim();
 }
 
-function first(value) {
-  return Array.isArray(value) ? value[0] : value;
+function normalizeDoi(value = "") {
+  return String(value)
+    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
+    .replace(/^doi:\s*/i, "")
+    .trim()
+    .toLowerCase();
+}
+
+function reconstructOpenAlexAbstract(index) {
+  if (!index || typeof index !== "object") return "";
+
+  const positions = [];
+
+  for (const [word, locs] of Object.entries(index)) {
+    if (!Array.isArray(locs)) continue;
+
+    for (const position of locs) {
+      positions.push([position, word]);
+    }
+  }
+
+  positions.sort((a, b) => a[0] - b[0]);
+
+  return positions.map((x) => x[1]).join(" ");
 }
 
 function safeYear(value) {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 1000 && n < 3000
-    ? n
-    : null;
+  if (!value) return null;
+
+  if (typeof value === "number") return value;
+
+  const match = String(value).match(/\b(19|20)\d{2}\b/);
+  return match ? Number(match[0]) : null;
 }
 
-function makeRecord({
-  source,
-  id = "",
-  title = "",
-  abstract = "",
-  authors = [],
-  year = null,
-  venue = "",
-  doi = "",
-  pmid = "",
-  url = "",
-  citationCount = null
-}) {
-  return {
-    source,
-    id: String(id || ""),
-    title: cleanText(title),
-    abstract: cleanText(abstract),
-    authors: Array.isArray(authors)
-      ? authors.map(cleanText).filter(Boolean)
-      : [],
-    year: safeYear(year),
-    venue: cleanText(venue),
-    doi: normalizeDoi(doi),
-    pmid: String(pmid || "").trim(),
-    url: String(url || "").trim(),
-    citationCount:
-      Number.isFinite(Number(citationCount))
-        ? Number(citationCount)
-        : null
-  };
-}
-
-function recordKey(record) {
-  if (record.doi) {
-    return `doi:${record.doi}`;
+function firstString(value) {
+  if (Array.isArray(value)) {
+    return value.find(Boolean) || "";
   }
-
-  if (record.pmid) {
-    return `pmid:${record.pmid}`;
-  }
-
-  const title = normalizeTitle(record.title);
-
-  if (title) {
-    return `title:${title}`;
-  }
-
-  return `${record.source}:${record.id}`;
-}
-
-function mergeRecords(oldRecord, newRecord) {
-  const mergedSources = new Set([
-    ...(oldRecord.sources || [oldRecord.source]),
-    ...(newRecord.sources || [newRecord.source])
-  ]);
-
-  return {
-    ...oldRecord,
-
-    title:
-      oldRecord.title.length >= newRecord.title.length
-        ? oldRecord.title
-        : newRecord.title,
-
-    abstract:
-      oldRecord.abstract.length >= newRecord.abstract.length
-        ? oldRecord.abstract
-        : newRecord.abstract,
-
-    authors:
-      oldRecord.authors.length >= newRecord.authors.length
-        ? oldRecord.authors
-        : newRecord.authors,
-
-    year: oldRecord.year || newRecord.year,
-
-    venue:
-      oldRecord.venue || newRecord.venue,
-
-    doi:
-      oldRecord.doi || newRecord.doi,
-
-    pmid:
-      oldRecord.pmid || newRecord.pmid,
-
-    url:
-      oldRecord.url || newRecord.url,
-
-    citationCount:
-      Math.max(
-        oldRecord.citationCount || 0,
-        newRecord.citationCount || 0
-      ) || null,
-
-    sources: Array.from(mergedSources)
-  };
+  return value || "";
 }
 
 function deduplicate(records) {
-  const map = new Map();
+  const seen = new Set();
+  const output = [];
 
-  for (const record of records) {
-    if (!record || !record.title) continue;
+  for (const item of records) {
+    const doi = normalizeDoi(item.doi || "");
+    const titleKey = normalizeTitle(item.title || "");
 
-    const key = recordKey(record);
+    const key = doi
+      ? `doi:${doi}`
+      : titleKey
+      ? `title:${titleKey}`
+      : `${item.source}:${item.id}`;
 
-    if (!map.has(key)) {
-      map.set(key, {
-        ...record,
-        sources: [record.source]
-      });
-    } else {
-      map.set(
-        key,
-        mergeRecords(map.get(key), record)
-      );
-    }
+    if (!key || seen.has(key)) continue;
+
+    seen.add(key);
+    output.push({
+      ...item,
+      doi
+    });
   }
 
-  return Array.from(map.values());
+  return output;
 }
 
-/* =========================================================
-   OPENALEX ABSTRACT DECODER
-   ========================================================= */
-
-function decodeOpenAlexAbstract(invertedIndex) {
-  if (
-    !invertedIndex ||
-    typeof invertedIndex !== "object"
-  ) {
-    return "";
-  }
-
-  const words = [];
-
-  for (const [word, positions] of Object.entries(
-    invertedIndex
-  )) {
-    if (!Array.isArray(positions)) continue;
-
-    for (const position of positions) {
-      words.push([position, word]);
-    }
-  }
-
-  words.sort((a, b) => a[0] - b[0]);
-
-  return words.map((x) => x[1]).join(" ");
+function truncate(value = "", max = 4000) {
+  const text = cleanText(value);
+  if (text.length <= max) return text;
+  return text.slice(0, max) + "…";
 }
 
 /* =========================================================
    OPENALEX
-   ========================================================= */
+========================================================= */
 
 async function searchOpenAlex(env, query, limit) {
   const params = new URLSearchParams({
     search: query,
-    per_page: String(Math.min(limit, 100))
+    per_page: String(Math.min(Math.max(limit, 1), 100))
   });
 
   if (env.OPENALEX_API_KEY) {
-    params.set(
-      "api_key",
-      env.OPENALEX_API_KEY
-    );
+    params.set("api_key", env.OPENALEX_API_KEY);
   }
 
-  const response = await fetch(
-    `https://api.openalex.org/works?${params.toString()}`
-  );
+  const url =
+    `https://api.openalex.org/works?${params.toString()}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json"
+    }
+  });
 
   if (!response.ok) {
     throw new Error(
@@ -232,53 +131,46 @@ async function searchOpenAlex(env, query, limit) {
 
   const data = await response.json();
 
-  return (data.results || []).map((item) =>
-    makeRecord({
-      source: "OpenAlex",
-      id: item.id,
-      title: item.title || item.display_name,
-      abstract: decodeOpenAlexAbstract(
-        item.abstract_inverted_index
-      ),
-      authors: (item.authorships || [])
-        .map(
-          (a) =>
-            a?.author?.display_name || ""
-        )
-        .filter(Boolean),
-      year: item.publication_year,
-      venue:
-        item?.primary_location?.source
-          ?.display_name || "",
-      doi: item.doi || "",
-      url:
-        item?.primary_location?.landing_page_url ||
-        item?.id ||
-        "",
-      citationCount:
-        item.cited_by_count
-    })
-  );
+  return (data.results || []).map((work) => ({
+    source: "OpenAlex",
+    id: work.id || "",
+    title: cleanText(work.title),
+    abstract: reconstructOpenAlexAbstract(
+      work.abstract_inverted_index
+    ),
+    year: work.publication_year || null,
+    doi: normalizeDoi(work.doi || ""),
+    authors: (work.authorships || [])
+      .map((a) => a.author?.display_name)
+      .filter(Boolean),
+    venue:
+      work.primary_location?.source?.display_name ||
+      work.host_venue?.display_name ||
+      "",
+    citedBy:
+      work.cited_by_count ?? null,
+    url:
+      work.doi ||
+      work.primary_location?.landing_page_url ||
+      work.id ||
+      ""
+  }));
 }
 
 /* =========================================================
    IEEE XPLORE
-   ========================================================= */
+========================================================= */
 
 async function searchIEEE(env, query, limit) {
   if (!env.IEEE_API_KEY) {
-    return {
-      skipped: true,
-      reason: "IEEE_API_KEY missing",
-      records: []
-    };
+    return [];
   }
 
   const params = new URLSearchParams({
     apikey: env.IEEE_API_KEY,
     format: "json",
     max_records: String(
-      Math.min(limit, 200)
+      Math.min(Math.max(limit, 1), 200)
     ),
     start_record: "1",
     sort_order: "desc",
@@ -286,9 +178,14 @@ async function searchIEEE(env, query, limit) {
     querytext: query
   });
 
-  const response = await fetch(
-    `https://ieeexploreapi.ieee.org/api/v1/search/articles?${params.toString()}`
-  );
+  const url =
+    `https://ieeexploreapi.ieee.org/api/v1/search/articles?${params.toString()}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json"
+    }
+  });
 
   if (!response.ok) {
     throw new Error(
@@ -298,315 +195,63 @@ async function searchIEEE(env, query, limit) {
 
   const data = await response.json();
 
-  const records = (data.articles || []).map(
-    (item) => {
-      const authors =
-        item?.authors?.authors?.map(
-          (a) =>
-            a.full_name ||
-            a.author_name ||
-            ""
-        ) || [];
-
-      return makeRecord({
-        source: "IEEE Xplore",
-        id:
-          item.article_number ||
-          item.index_terms ||
-          "",
-        title: item.title,
-        abstract: item.abstract,
-        authors,
-        year:
-          item.publication_year ||
-          item.publication_date,
-        venue:
-          item.publication_title,
-        doi: item.doi,
-        url:
-          item.html_url ||
-          item.pdf_url ||
-          "",
-        citationCount:
-          item.citing_paper_count
-      });
-    }
-  );
-
-  return {
-    skipped: false,
-    records
-  };
-}
-
-/* =========================================================
-   EUROPE PMC
-   ========================================================= */
-
-async function searchEuropePMC(query, limit) {
-  const params = new URLSearchParams({
-    query,
-    format: "json",
-    resultType: "core",
-    pageSize: String(
-      Math.min(limit, 1000)
-    )
-  });
-
-  const response = await fetch(
-    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?${params.toString()}`
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Europe PMC ${response.status}: ${await response.text()}`
-    );
-  }
-
-  const data = await response.json();
-
-  return (
-    data?.resultList?.result || []
-  ).map((item) =>
-    makeRecord({
-      source: "Europe PMC",
-      id: item.id,
-      title: item.title,
-      abstract: item.abstractText,
-      authors:
-        item.authorList?.author?.map(
-          (a) =>
-            a.fullName ||
-            [
-              a.firstName,
-              a.lastName
-            ]
-              .filter(Boolean)
-              .join(" ")
-        ) || [],
-      year:
-        item.pubYear ||
-        item.firstPublicationDate,
-      venue:
-        item.journalTitle ||
-        item.journalInfo?.journal
-          ?.title ||
-        "",
-      doi: item.doi,
-      pmid:
-        item.pmid ||
-        (item.source === "MED"
-          ? item.id
-          : ""),
-      url:
-        item.doi
-          ? `https://doi.org/${normalizeDoi(
-              item.doi
-            )}`
-          : "",
-      citationCount:
-        item.citedByCount
-    })
-  );
-}
-
-/* =========================================================
-   PUBMED / NCBI
-   ========================================================= */
-
-async function searchPubMed(env, query, limit) {
-  const searchParams =
-    new URLSearchParams({
-      db: "pubmed",
-      term: query,
-      retmode: "json",
-      retmax: String(
-        Math.min(limit, 200)
+  return (data.articles || []).map((article) => ({
+    source: "IEEE Xplore",
+    id:
+      article.article_number ||
+      article.content_type ||
+      "",
+    title: cleanText(article.title),
+    abstract: cleanText(article.abstract),
+    year: safeYear(article.publication_year),
+    doi: normalizeDoi(article.doi || ""),
+    authors: (article.authors?.authors || [])
+      .map(
+        (a) =>
+          a.full_name ||
+          [a.first_name, a.last_name]
+            .filter(Boolean)
+            .join(" ")
       )
-    });
-
-  if (env.NCBI_API_KEY) {
-    searchParams.set(
-      "api_key",
-      env.NCBI_API_KEY
-    );
-  }
-
-  const searchResponse = await fetch(
-    `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?${searchParams.toString()}`
-  );
-
-  if (!searchResponse.ok) {
-    throw new Error(
-      `PubMed ESearch ${searchResponse.status}: ${await searchResponse.text()}`
-    );
-  }
-
-  const searchData =
-    await searchResponse.json();
-
-  const ids =
-    searchData?.esearchresult?.idlist ||
-    [];
-
-  if (!ids.length) {
-    return [];
-  }
-
-  const fetchParams =
-    new URLSearchParams({
-      db: "pubmed",
-      id: ids.join(","),
-      retmode: "xml"
-    });
-
-  if (env.NCBI_API_KEY) {
-    fetchParams.set(
-      "api_key",
-      env.NCBI_API_KEY
-    );
-  }
-
-  const fetchResponse = await fetch(
-    `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?${fetchParams.toString()}`
-  );
-
-  if (!fetchResponse.ok) {
-    throw new Error(
-      `PubMed EFetch ${fetchResponse.status}: ${await fetchResponse.text()}`
-    );
-  }
-
-  const xml = await fetchResponse.text();
-
-  /*
-    Cloudflare Workers has DOMParser in many runtimes,
-    but to avoid relying on browser DOM APIs here,
-    use conservative XML extraction for the fields
-    required by TRT.
-  */
-
-  const articles =
-    xml.match(
-      /<PubmedArticle>[\s\S]*?<\/PubmedArticle>/g
-    ) || [];
-
-  return articles.map((block) => {
-    const extract = (tag) => {
-      const match = block.match(
-        new RegExp(
-          `<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`,
-          "i"
-        )
-      );
-
-      return match
-        ? cleanText(match[1])
-        : "";
-    };
-
-    const title =
-      extract("ArticleTitle");
-
-    const abstractParts = [];
-
-    const abstractRegex =
-      /<AbstractText[^>]*>([\s\S]*?)<\/AbstractText>/gi;
-
-    let abstractMatch;
-
-    while (
-      (abstractMatch =
-        abstractRegex.exec(block))
-    ) {
-      abstractParts.push(
-        cleanText(abstractMatch[1])
-      );
-    }
-
-    const authorBlocks =
-      block.match(
-        /<Author[^>]*>[\s\S]*?<\/Author>/gi
-      ) || [];
-
-    const authors = authorBlocks
-      .map((authorBlock) => {
-        const last =
-          authorBlock.match(
-            /<LastName>([\s\S]*?)<\/LastName>/i
-          )?.[1] || "";
-
-        const fore =
-          authorBlock.match(
-            /<ForeName>([\s\S]*?)<\/ForeName>/i
-          )?.[1] || "";
-
-        return cleanText(
-          `${fore} ${last}`
-        );
-      })
-      .filter(Boolean);
-
-    const pmid =
-      block.match(
-        /<PMID[^>]*>([\s\S]*?)<\/PMID>/i
-      )?.[1] || "";
-
-    const doi =
-      block.match(
-        /<ArticleId[^>]*IdType=["']doi["'][^>]*>([\s\S]*?)<\/ArticleId>/i
-      )?.[1] || "";
-
-    const year =
-      block.match(
-        /<PubDate>[\s\S]*?<Year>(\d{4})<\/Year>[\s\S]*?<\/PubDate>/i
-      )?.[1] ||
-      block.match(
-        /<ArticleDate[^>]*>[\s\S]*?<Year>(\d{4})<\/Year>/i
-      )?.[1] ||
-      null;
-
-    const journal =
-      block.match(
-        /<Journal>[\s\S]*?<Title>([\s\S]*?)<\/Title>[\s\S]*?<\/Journal>/i
-      )?.[1] || "";
-
-    return makeRecord({
-      source: "PubMed",
-      id: pmid,
-      title,
-      abstract:
-        abstractParts.join(" "),
-      authors,
-      year,
-      venue: journal,
-      doi,
-      pmid,
-      url: pmid
-        ? `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`
-        : ""
-    });
-  });
+      .filter(Boolean),
+    venue:
+      article.publication_title ||
+      article.publisher ||
+      "",
+    citedBy: null,
+    url:
+      article.html_url ||
+      article.pdf_url ||
+      (article.doi
+        ? `https://doi.org/${normalizeDoi(article.doi)}`
+        : "")
+  }));
 }
 
 /* =========================================================
    CROSSREF
-   ========================================================= */
+========================================================= */
 
-async function searchCrossref(
-  query,
-  limit
-) {
+async function searchCrossref(query, limit) {
   const params = new URLSearchParams({
-    query,
+    "query.bibliographic": query,
     rows: String(
-      Math.min(limit, 200)
-    )
+      Math.min(Math.max(limit, 1), 1000)
+    ),
+    select:
+      "DOI,title,author,published,container-title,abstract,URL,is-referenced-by-count"
   });
 
-  const response = await fetch(
-    `https://api.crossref.org/works?${params.toString()}`
-  );
+  const url =
+    `https://api.crossref.org/works?${params.toString()}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent":
+        "TRT-Research/6.0 (academic research)"
+    }
+  });
 
   if (!response.ok) {
     throw new Error(
@@ -615,79 +260,427 @@ async function searchCrossref(
   }
 
   const data = await response.json();
+  const items = data.message?.items || [];
 
-  return (
-    data?.message?.items || []
-  ).map((item) => {
-    const authors =
-      (item.author || []).map((a) =>
-        cleanText(
+  return items.map((work) => {
+    const dateParts =
+      work.published?.["date-parts"]?.[0] || [];
+
+    return {
+      source: "Crossref",
+      id: work.DOI || work.URL || "",
+      title: cleanText(firstString(work.title)),
+      abstract: cleanText(work.abstract),
+      year: safeYear(dateParts[0]),
+      doi: normalizeDoi(work.DOI || ""),
+      authors: (work.author || [])
+        .map((a) =>
           [a.given, a.family]
             .filter(Boolean)
             .join(" ")
         )
-      );
-
-    const dateParts =
-      item?.published?.["date-parts"]?.[0] ||
-      item?.["published-print"]?.[
-        "date-parts"
-      ]?.[0] ||
-      item?.["published-online"]?.[
-        "date-parts"
-      ]?.[0] ||
-      [];
-
-    return makeRecord({
-      source: "Crossref",
-      id: item.DOI,
-      title: first(item.title) || "",
-      abstract: item.abstract || "",
-      authors,
-      year: dateParts[0],
-      venue:
-        first(
-          item["container-title"]
-        ) || "",
-      doi: item.DOI,
+        .filter(Boolean),
+      venue: cleanText(
+        firstString(work["container-title"])
+      ),
+      citedBy:
+        work["is-referenced-by-count"] ?? null,
       url:
-        item.URL ||
-        (item.DOI
-          ? `https://doi.org/${normalizeDoi(
-              item.DOI
-            )}`
-          : ""),
-      citationCount:
-        item[
-          "is-referenced-by-count"
-        ]
-    });
+        work.URL ||
+        (work.DOI
+          ? `https://doi.org/${normalizeDoi(work.DOI)}`
+          : "")
+    };
   });
 }
 
 /* =========================================================
-   NVIDIA NEMOTRON
-   ========================================================= */
+   EUROPE PMC
+========================================================= */
 
-async function callNemotron(
-  env,
-  systemPrompt,
-  userPrompt,
-  maxTokens = 1800
-) {
-  if (!env.NVIDIA_API_KEY) {
+async function searchEuropePMC(query, limit) {
+  const params = new URLSearchParams({
+    query,
+    format: "json",
+    resultType: "core",
+    pageSize: String(
+      Math.min(Math.max(limit, 1), 1000)
+    )
+  });
+
+  const url =
+    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?${params.toString()}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
     throw new Error(
-      "NVIDIA_API_KEY missing."
+      `Europe PMC ${response.status}: ${await response.text()}`
     );
   }
 
-  const response = await fetch(
-    NVIDIA_URL,
-    {
-      method: "POST",
+  const data = await response.json();
+  const results = data.resultList?.result || [];
 
-      headers: {
-        Authorization:
-          `Bearer ${env.NVIDIA_API_KEY}`,
-        "Content-Type":
-          "application/json",
+  return results.map((work) => ({
+    source: "Europe PMC",
+    id:
+      work.pmid ||
+      work.pmcid ||
+      work.id ||
+      "",
+    title: cleanText(work.title),
+    abstract: cleanText(work.abstractText),
+    year: safeYear(
+      work.pubYear ||
+      work.firstPublicationDate
+    ),
+    doi: normalizeDoi(work.doi || ""),
+    authors:
+      work.authorList?.author
+        ?.map((a) => a.fullName)
+        .filter(Boolean) || [],
+    venue:
+      work.journalInfo?.journal?.title ||
+      work.journalTitle ||
+      "",
+    citedBy:
+      work.citedByCount ?? null,
+    pmid: work.pmid || "",
+    pmcid: work.pmcid || "",
+    url: work.doi
+      ? `https://doi.org/${normalizeDoi(work.doi)}`
+      : work.pmid
+      ? `https://pubmed.ncbi.nlm.nih.gov/${work.pmid}/`
+      : ""
+  }));
+}
+
+/* =========================================================
+   NVIDIA
+========================================================= */
+
+async function askNemotron(
+  env,
+  systemPrompt,
+  userPrompt,
+  maxTokens = 2500
+) {
+  if (!env.NVIDIA_API_KEY) {
+    throw new Error("NVIDIA_API_KEY is missing.");
+  }
+
+  const response = await fetch(NVIDIA_URL, {
+    method: "POST",
+    headers: {
+      Authorization:
+        `Bearer ${env.NVIDIA_API_KEY}`,
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({
+      model: NVIDIA_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt
+        },
+        {
+          role: "user",
+          content: userPrompt
+        }
+      ],
+      temperature: 0.2,
+      max_tokens: maxTokens,
+      reasoning_effort: "none",
+      stream: false
+    })
+  });
+
+  const raw = await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      `NVIDIA ${response.status}: ${raw}`
+    );
+  }
+
+  const data = JSON.parse(raw);
+
+  return (
+    data?.choices?.[0]?.message?.content ||
+    ""
+  );
+}
+
+/* =========================================================
+   APA-LIKE REFERENCES FROM REAL API METADATA
+========================================================= */
+
+function referenceLine(record, index) {
+  const authors =
+    record.authors?.length
+      ? record.authors.join(", ")
+      : "Author information unavailable";
+
+  const year =
+    record.year || "n.d.";
+
+  const title =
+    record.title ||
+    "Title unavailable";
+
+  const venue =
+    record.venue
+      ? ` ${record.venue}.`
+      : "";
+
+  const identifier = record.doi
+    ? ` https://doi.org/${record.doi}`
+    : record.pmid
+    ? ` https://pubmed.ncbi.nlm.nih.gov/${record.pmid}/`
+    : record.url
+    ? ` ${record.url}`
+    : "";
+
+  return `${index + 1}. ${authors} (${year}). ${title}.${venue}${identifier}`;
+}
+
+/* =========================================================
+   EVIDENCE PACK
+========================================================= */
+
+function buildEvidencePack(records) {
+  return records
+    .map((r, i) => {
+      return `
+STUDY ${i + 1}
+DATABASE: ${r.source}
+TITLE: ${r.title}
+YEAR: ${r.year || "Unknown"}
+AUTHORS: ${(r.authors || []).join(", ") || "Unknown"}
+VENUE: ${r.venue || "Unknown"}
+DOI: ${r.doi || "None"}
+PMID: ${r.pmid || "None"}
+CITED BY: ${
+        r.citedBy === null ||
+        r.citedBy === undefined
+          ? "Unknown"
+          : r.citedBy
+      }
+ABSTRACT:
+${
+  r.abstract
+    ? truncate(r.abstract, 3000)
+    : "[ABSTRACT NOT AVAILABLE FROM THIS API]"
+}
+`;
+    })
+    .join("\n-----------------------------\n");
+}
+
+/* =========================================================
+   MCP
+========================================================= */
+
+function createServer(env) {
+  const server = new McpServer({
+    name: "TRT — Tamer RED TEAM",
+    version: "6.0.0"
+  });
+
+  /* -------------------------------------------------------
+     TRT RESEARCH
+  ------------------------------------------------------- */
+
+  server.registerTool(
+    "trt_research",
+    {
+      description:
+        "Conduct real academic research using live academic APIs, evaluate the requested number of unique studies where available, then perform adversarial TRT synthesis. Returns research trace, long report, and references derived from retrieved API metadata.",
+
+      inputSchema: z.object({
+        topic: z
+          .string()
+          .min(3)
+          .describe(
+            "Exact research topic/question."
+          ),
+
+        source_count: z
+          .number()
+          .int()
+          .min(5)
+          .max(200)
+          .describe(
+            "Target number of unique academic studies to evaluate. The user chooses this number."
+          ),
+
+        instructions: z
+          .string()
+          .optional()
+          .describe(
+            "Additional scope, inclusion/exclusion criteria, time period, population, output requirements, or special RED TEAM instructions."
+          )
+      })
+    },
+
+    async ({
+      topic,
+      source_count,
+      instructions = ""
+    }) => {
+      try {
+        /*
+        We intentionally over-retrieve because databases overlap.
+        */
+        const perSource = Math.min(
+          Math.max(
+            Math.ceil(source_count * 0.8),
+            10
+          ),
+          100
+        );
+
+        const sourceStatus = {
+          openalex: "not run",
+          ieee: "not run",
+          crossref: "not run",
+          europepmc: "not run"
+        };
+
+        const errors = [];
+
+        const jobs = [
+          searchOpenAlex(
+            env,
+            topic,
+            perSource
+          )
+            .then((x) => {
+              sourceStatus.openalex =
+                `OK (${x.length})`;
+              return x;
+            })
+            .catch((e) => {
+              sourceStatus.openalex =
+                `ERROR`;
+              errors.push(
+                `OpenAlex: ${e.message}`
+              );
+              return [];
+            }),
+
+          searchIEEE(
+            env,
+            topic,
+            perSource
+          )
+            .then((x) => {
+              sourceStatus.ieee =
+                env.IEEE_API_KEY
+                  ? `OK (${x.length})`
+                  : "SKIPPED — no IEEE_API_KEY";
+              return x;
+            })
+            .catch((e) => {
+              sourceStatus.ieee =
+                `ERROR`;
+              errors.push(
+                `IEEE: ${e.message}`
+              );
+              return [];
+            }),
+
+          searchCrossref(
+            topic,
+            perSource
+          )
+            .then((x) => {
+              sourceStatus.crossref =
+                `OK (${x.length})`;
+              return x;
+            })
+            .catch((e) => {
+              sourceStatus.crossref =
+                `ERROR`;
+              errors.push(
+                `Crossref: ${e.message}`
+              );
+              return [];
+            }),
+
+          searchEuropePMC(
+            topic,
+            perSource
+          )
+            .then((x) => {
+              sourceStatus.europepmc =
+                `OK (${x.length})`;
+              return x;
+            })
+            .catch((e) => {
+              sourceStatus.europepmc =
+                `ERROR`;
+              errors.push(
+                `Europe PMC: ${e.message}`
+              );
+              return [];
+            })
+        ];
+
+        const groups =
+          await Promise.all(jobs);
+
+        const rawRecords =
+          groups.flat();
+
+        const unique =
+          deduplicate(rawRecords);
+
+        /*
+        Prefer records with abstracts, then citation count.
+        */
+        unique.sort((a, b) => {
+          const aa =
+            a.abstract ? 1 : 0;
+          const ba =
+            b.abstract ? 1 : 0;
+
+          if (aa !== ba) {
+            return ba - aa;
+          }
+
+          return (
+            (b.citedBy || 0) -
+            (a.citedBy || 0)
+          );
+        });
+
+        const selected =
+          unique.slice(
+            0,
+            source_count
+          );
+
+        const abstractCount =
+          selected.filter(
+            (x) => x.abstract
+          ).length;
+
+        if (!selected.length) {
+          throw new Error(
+            "No academic records were retrieved. Research was not completed."
+          );
+        }
+
+        /*
+        Keep Nemotron payload bounded to avoid the 524 problem
+        we observed with very large synchronous calls.
+        */
+        const synthesisSet =
+          selected.slice(0,
