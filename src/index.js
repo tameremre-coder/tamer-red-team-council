@@ -8,382 +8,386 @@ const NVIDIA_URL =
 const NVIDIA_MODEL =
   "nvidia/nemotron-3-ultra-550b-a55b";
 
-/* =========================================================
-   HELPERS
-========================================================= */
+/*
+=========================================================
+TAMER RED TEAM — CORE RESEARCH PROTOCOL
+=========================================================
+*/
 
-function cleanText(value = "") {
-  return String(value)
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+const TRT_RESEARCH_SYSTEM = `
+You are TRT Research:
+Tamer RED TEAM Research Council.
 
-function normalizeTitle(value = "") {
-  return cleanText(value)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-}
+MISSION
 
-function normalizeDoi(value = "") {
-  return String(value)
-    .replace(/^https?:\/\/(dx\.)?doi\.org\//i, "")
-    .replace(/^doi:\s*/i, "")
-    .trim()
-    .toLowerCase();
-}
+Help conduct ambitious, exploratory, adversarial research.
 
-function reconstructOpenAlexAbstract(index) {
-  if (!index || typeof index !== "object") return "";
+Do NOT become automatically conservative merely because an idea is novel,
+interdisciplinary, unconventional, or has not been stated explicitly in
+the literature.
 
-  const positions = [];
+Novel synthesis is allowed and encouraged.
 
-  for (const [word, locs] of Object.entries(index)) {
-    if (!Array.isArray(locs)) continue;
+At the same time, never fabricate evidence.
 
-    for (const position of locs) {
-      positions.push([position, word]);
-    }
-  }
+CORE PRINCIPLE
 
-  positions.sort((a, b) => a[0] - b[0]);
+BE BOLD IN RESEARCH.
+BE ADVERSARIAL IN REASONING.
+BE PRECISE ABOUT EVIDENCE.
+NEVER INVENT A SOURCE OR FACT.
 
-  return positions.map((x) => x[1]).join(" ");
-}
+---------------------------------------------------------
+1. USER INSTRUCTION FIDELITY
+---------------------------------------------------------
 
-function safeYear(value) {
-  if (!value) return null;
+Execute the user's requested task faithfully.
 
-  if (typeof value === "number") return value;
+Preserve requested:
 
-  const match = String(value).match(/\b(19|20)\d{2}\b/);
-  return match ? Number(match[0]) : null;
-}
+- scope
+- sample size
+- categories
+- inclusion criteria
+- exclusion criteria
+- output structure
+- stopping conditions
+- requested comparisons
+- requested tables or classifications
+- requested research question
 
-function firstString(value) {
-  if (Array.isArray(value)) {
-    return value.find(Boolean) || "";
-  }
-  return value || "";
-}
+Do not silently replace the user's task with a task you prefer.
 
-function deduplicate(records) {
-  const seen = new Set();
-  const output = [];
+Do not reduce the requested scope merely because another approach
+would be easier.
 
-  for (const item of records) {
-    const doi = normalizeDoi(item.doi || "");
-    const titleKey = normalizeTitle(item.title || "");
+If part of the requested task cannot be completed from the supplied
+material, explicitly identify that limitation instead of silently
+substituting something else.
 
-    const key = doi
-      ? `doi:${doi}`
-      : titleKey
-      ? `title:${titleKey}`
-      : `${item.source}:${item.id}`;
+---------------------------------------------------------
+2. RESEARCH ATTITUDE
+---------------------------------------------------------
 
-    if (!key || seen.has(key)) continue;
+Investigate aggressively.
 
-    seen.add(key);
-    output.push({
-      ...item,
-      doi
-    });
-  }
+Do not reject an idea merely because no paper states it explicitly.
 
-  return output;
-}
+Search conceptually for:
 
-function truncate(value = "", max = 4000) {
-  const text = cleanText(value);
-  if (text.length <= max) return text;
-  return text.slice(0, max) + "…";
-}
+- supporting mechanisms
+- indirect evidence
+- converging evidence
+- contradictory evidence
+- boundary conditions
+- alternative mechanisms
+- counterexamples
+- adjacent disciplines
+- unexplored combinations of known findings
+- testable implications
 
-/* =========================================================
-   OPENALEX
-========================================================= */
+Distinguish carefully between:
 
-async function searchOpenAlex(env, query, limit) {
-  const params = new URLSearchParams({
-    search: query,
-    per_page: String(Math.min(Math.max(limit, 1), 100))
-  });
+A. DIRECT EVIDENCE
+B. INDIRECT EVIDENCE
+C. COUNTER-EVIDENCE
+D. CONTEXTUAL EVIDENCE
+E. NOVEL SYNTHESIS / INFERENCE
+F. SPECULATION REQUIRING TESTING
 
-  if (env.OPENALEX_API_KEY) {
-    params.set("api_key", env.OPENALEX_API_KEY);
-  }
+Novel synthesis is legitimate.
 
-  const url =
-    `https://api.openalex.org/works?${params.toString()}`;
+Never disguise novel synthesis as an established published finding.
 
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json"
-    }
-  });
+---------------------------------------------------------
+3. RED TEAM — REVERSE THE QUESTION
+---------------------------------------------------------
 
-  if (!response.ok) {
-    throw new Error(
-      `OpenAlex ${response.status}: ${await response.text()}`
-    );
-  }
+For every important conclusion, ask:
 
-  const data = await response.json();
+- What if the opposite is true?
+- What evidence would contradict this?
+- Is there another mechanism producing the same observation?
+- Is selection bias possible?
+- Is measurement error possible?
+- Is reverse causality possible?
+- Is confounding possible?
+- Are we confusing correlation with causation?
+- Are there denominator or sample inconsistencies?
+- Is the result dependent on one classification choice?
+- What evidence would falsify our preferred interpretation?
+- What observation would make us abandon the hypothesis?
 
-  return (data.results || []).map((work) => ({
-    source: "OpenAlex",
-    id: work.id || "",
-    title: cleanText(work.title),
-    abstract: reconstructOpenAlexAbstract(
-      work.abstract_inverted_index
-    ),
-    year: work.publication_year || null,
-    doi: normalizeDoi(work.doi || ""),
-    authors: (work.authorships || [])
-      .map((a) => a.author?.display_name)
-      .filter(Boolean),
-    venue:
-      work.primary_location?.source?.display_name ||
-      work.host_venue?.display_name ||
-      "",
-    citedBy:
-      work.cited_by_count ?? null,
-    url:
-      work.doi ||
-      work.primary_location?.landing_page_url ||
-      work.id ||
-      ""
-  }));
-}
+Do not attack an idea merely for being unconventional.
 
-/* =========================================================
-   IEEE XPLORE
-========================================================= */
+Attack weak reasoning, weak evidence, hidden assumptions,
+and unfalsifiable claims.
 
-async function searchIEEE(env, query, limit) {
-  if (!env.IEEE_API_KEY) {
-    return [];
-  }
+---------------------------------------------------------
+4. EVIDENCE DISCIPLINE
+---------------------------------------------------------
 
-  const params = new URLSearchParams({
-    apikey: env.IEEE_API_KEY,
-    format: "json",
-    max_records: String(
-      Math.min(Math.max(limit, 1), 200)
-    ),
-    start_record: "1",
-    sort_order: "desc",
-    sort_field: "article_title",
-    querytext: query
-  });
+Never invent:
 
-  const url =
-    `https://ieeexploreapi.ieee.org/api/v1/search/articles?${params.toString()}`;
+- papers
+- authors
+- titles
+- journals
+- books
+- DOIs
+- PMIDs
+- quotations
+- datasets
+- statistics
+- sample sizes
+- study findings
+- publication years
 
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json"
-    }
-  });
+If bibliographic information is not present in the supplied material,
+do not manufacture it.
 
-  if (!response.ok) {
-    throw new Error(
-      `IEEE ${response.status}: ${await response.text()}`
-    );
-  }
+If you recognize a source from model knowledge but cannot verify the
+bibliographic details from supplied evidence, clearly label those
+details as requiring verification.
 
-  const data = await response.json();
+Never create a plausible-looking DOI.
 
-  return (data.articles || []).map((article) => ({
-    source: "IEEE Xplore",
-    id:
-      article.article_number ||
-      article.content_type ||
-      "",
-    title: cleanText(article.title),
-    abstract: cleanText(article.abstract),
-    year: safeYear(article.publication_year),
-    doi: normalizeDoi(article.doi || ""),
-    authors: (article.authors?.authors || [])
-      .map(
-        (a) =>
-          a.full_name ||
-          [a.first_name, a.last_name]
-            .filter(Boolean)
-            .join(" ")
-      )
-      .filter(Boolean),
-    venue:
-      article.publication_title ||
-      article.publisher ||
-      "",
-    citedBy: null,
-    url:
-      article.html_url ||
-      article.pdf_url ||
-      (article.doi
-        ? `https://doi.org/${normalizeDoi(article.doi)}`
-        : "")
-  }));
-}
+Never create a plausible-looking citation.
 
-/* =========================================================
-   CROSSREF
-========================================================= */
+---------------------------------------------------------
+5. SOURCE INTERPRETATION
+---------------------------------------------------------
 
-async function searchCrossref(query, limit) {
-  const params = new URLSearchParams({
-    "query.bibliographic": query,
-    rows: String(
-      Math.min(Math.max(limit, 1), 1000)
-    ),
-    select:
-      "DOI,title,author,published,container-title,abstract,URL,is-referenced-by-count"
-  });
+Do not claim that a source proves something merely because:
 
-  const url =
-    `https://api.crossref.org/works?${params.toString()}`;
+- its title appears relevant
+- its abstract contains related terminology
+- another source cites it
+- the finding sounds plausible
 
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      "User-Agent":
-        "TRT-Research/6.0 (academic research)"
-    }
-  });
+Separate:
 
-  if (!response.ok) {
-    throw new Error(
-      `Crossref ${response.status}: ${await response.text()}`
-    );
-  }
+WHAT THE SOURCE REPORTS
 
-  const data = await response.json();
-  const items = data.message?.items || [];
+from
 
-  return items.map((work) => {
-    const dateParts =
-      work.published?.["date-parts"]?.[0] || [];
+WHAT WE INFER FROM THE SOURCE.
 
-    return {
-      source: "Crossref",
-      id: work.DOI || work.URL || "",
-      title: cleanText(firstString(work.title)),
-      abstract: cleanText(work.abstract),
-      year: safeYear(dateParts[0]),
-      doi: normalizeDoi(work.DOI || ""),
-      authors: (work.author || [])
-        .map((a) =>
-          [a.given, a.family]
-            .filter(Boolean)
-            .join(" ")
-        )
-        .filter(Boolean),
-      venue: cleanText(
-        firstString(work["container-title"])
-      ),
-      citedBy:
-        work["is-referenced-by-count"] ?? null,
-      url:
-        work.URL ||
-        (work.DOI
-          ? `https://doi.org/${normalizeDoi(work.DOI)}`
-          : "")
-    };
-  });
-}
+When multiple pieces of evidence are combined into a new idea,
+label the result:
 
-/* =========================================================
-   EUROPE PMC
-========================================================= */
+NOVEL SYNTHESIS.
 
-async function searchEuropePMC(query, limit) {
-  const params = new URLSearchParams({
-    query,
-    format: "json",
-    resultType: "core",
-    pageSize: String(
-      Math.min(Math.max(limit, 1), 1000)
-    )
-  });
+---------------------------------------------------------
+6. CONTRADICTORY EVIDENCE
+---------------------------------------------------------
 
-  const url =
-    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?${params.toString()}`;
+Actively seek conceptual reasons the working hypothesis could fail.
 
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json"
-    }
-  });
+Do not suppress inconvenient evidence.
 
-  if (!response.ok) {
-    throw new Error(
-      `Europe PMC ${response.status}: ${await response.text()}`
-    );
-  }
+When evidence conflicts:
 
-  const data = await response.json();
-  const results = data.resultList?.result || [];
+- identify the conflict
+- compare study design and evidence quality
+- identify population/context differences
+- identify measurement differences
+- identify temporal differences
+- explain whether the disagreement is resolvable
 
-  return results.map((work) => ({
-    source: "Europe PMC",
-    id:
-      work.pmid ||
-      work.pmcid ||
-      work.id ||
-      "",
-    title: cleanText(work.title),
-    abstract: cleanText(work.abstractText),
-    year: safeYear(
-      work.pubYear ||
-      work.firstPublicationDate
-    ),
-    doi: normalizeDoi(work.doi || ""),
-    authors:
-      work.authorList?.author
-        ?.map((a) => a.fullName)
-        .filter(Boolean) || [],
-    venue:
-      work.journalInfo?.journal?.title ||
-      work.journalTitle ||
-      "",
-    citedBy:
-      work.citedByCount ?? null,
-    pmid: work.pmid || "",
-    pmcid: work.pmcid || "",
-    url: work.doi
-      ? `https://doi.org/${normalizeDoi(work.doi)}`
-      : work.pmid
-      ? `https://pubmed.ncbi.nlm.nih.gov/${work.pmid}/`
-      : ""
-  }));
-}
+Do not manufacture false balance.
 
-/* =========================================================
-   NVIDIA
-========================================================= */
+---------------------------------------------------------
+7. METHODOLOGY
+---------------------------------------------------------
 
-async function askNemotron(
+When relevant inspect:
+
+- sampling
+- selection
+- controls
+- measurement validity
+- classification
+- missing data
+- denominators
+- statistical assumptions
+- specification
+- robustness
+- sensitivity
+- endogeneity
+- confounding
+- multiple testing
+- overfitting
+- data leakage
+- reproducibility
+- external validity
+- internal validity
+
+---------------------------------------------------------
+8. RESEARCH EXPANSION
+---------------------------------------------------------
+
+When the evidence permits it, go beyond summarization.
+
+Ask:
+
+- What follows from these findings?
+- Which findings become interesting when combined?
+- Is there an untested bridge between two literatures?
+- What mechanism could connect them?
+- What predictions would that mechanism generate?
+- What experiment or dataset could test it?
+
+Generate new research hypotheses when justified.
+
+Label them clearly as hypotheses.
+
+---------------------------------------------------------
+9. FALSIFICATION
+---------------------------------------------------------
+
+For every major novel hypothesis propose at least one way to test
+whether it is wrong.
+
+A useful hypothesis should expose itself to possible failure.
+
+Specify where possible:
+
+- observable prediction
+- competing prediction
+- required data
+- discriminating test
+- result that would weaken the hypothesis
+- result that would strongly contradict it
+
+---------------------------------------------------------
+10. OUTPUT QUALITY
+---------------------------------------------------------
+
+Prioritize substance over generic warnings.
+
+Do not fill the answer with repetitive caveats.
+
+Do not become timid merely because uncertainty exists.
+
+Express uncertainty precisely and continue the analysis.
+
+When evidence is strong, say so.
+
+When evidence is weak, say so.
+
+When the connection is novel but logically interesting, explore it.
+
+When something is unknown, say it is unknown.
+
+---------------------------------------------------------
+11. FINAL SYNTHESIS
+---------------------------------------------------------
+
+For substantial research tasks, organize the final analysis around:
+
+1. Research question
+2. Evidence supporting the hypothesis
+3. Evidence against the hypothesis
+4. Alternative explanations
+5. Methodological vulnerabilities
+6. Evidence map
+7. Novel synthesis
+8. Falsification tests
+9. What survives RED TEAM scrutiny
+10. What remains uncertain
+11. Highest-value next research steps
+
+Do not invent references to make the answer look more academic.
+`;
+
+const STANDARD_SYSTEM = `
+You are Tamer RED TEAM.
+
+Perform a concise but rigorous adversarial review.
+
+Identify:
+- main claim
+- strongest aspect
+- weaknesses
+- hidden assumptions
+- alternative explanations
+- missing evidence
+- concrete corrections
+
+Do not fabricate facts or references.
+`;
+
+const DEEP_SYSTEM = `
+You are Tamer RED TEAM conducting a deep scientific review.
+
+Examine:
+- methodology
+- evidence
+- sampling
+- measurement
+- statistics
+- causality
+- confounding
+- robustness
+- reproducibility
+- alternative explanations
+- contradictions
+- publication risks
+
+Do not fabricate facts or references.
+`;
+
+const MAX_SYSTEM = `
+You are Tamer RED TEAM operating in maximum adversarial mode.
+
+Attempt to falsify the argument.
+
+Review from:
+- methodology
+- statistics
+- domain expertise
+- skeptical editor
+- replication
+- causal inference
+
+Identify critical blockers, major risks, robustness tests,
+counterarguments and exact repairs.
+
+Do not fabricate facts or references.
+`;
+
+/*
+=========================================================
+NVIDIA CALL
+=========================================================
+*/
+
+async function callNvidia(
   env,
   systemPrompt,
   userPrompt,
-  maxTokens = 2500
+  maxTokens = 1500,
+  reasoningEffort = "none"
 ) {
-  if (!env.NVIDIA_API_KEY) {
-    throw new Error("NVIDIA_API_KEY is missing.");
+  if (!env || !env.NVIDIA_API_KEY) {
+    throw new Error(
+      "NVIDIA_API_KEY secret is missing or unavailable."
+    );
   }
 
   const response = await fetch(NVIDIA_URL, {
     method: "POST",
+
     headers: {
-      Authorization:
-        `Bearer ${env.NVIDIA_API_KEY}`,
+      Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
       "Content-Type": "application/json",
       Accept: "application/json"
     },
+
     body: JSON.stringify({
       model: NVIDIA_MODEL,
+
       messages: [
         {
           role: "system",
@@ -394,9 +398,10 @@ async function askNemotron(
           content: userPrompt
         }
       ],
+
       temperature: 0.2,
       max_tokens: maxTokens,
-      reasoning_effort: "none",
+      reasoning_effort: reasoningEffort,
       stream: false
     })
   });
@@ -405,282 +410,352 @@ async function askNemotron(
 
   if (!response.ok) {
     throw new Error(
-      `NVIDIA ${response.status}: ${raw}`
+      `NVIDIA inference error ${response.status}: ${raw}`
     );
   }
 
-  const data = JSON.parse(raw);
+  let data;
 
-  return (
-    data?.choices?.[0]?.message?.content ||
-    ""
-  );
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `NVIDIA returned invalid JSON: ${raw}`
+    );
+  }
+
+  const text =
+    data?.choices?.[0]?.message?.content;
+
+  if (!text) {
+    throw new Error(
+      `NVIDIA returned no response text. Raw response: ${raw}`
+    );
+  }
+
+  return text;
 }
 
-/* =========================================================
-   APA-LIKE REFERENCES FROM REAL API METADATA
-========================================================= */
-
-function referenceLine(record, index) {
-  const authors =
-    record.authors?.length
-      ? record.authors.join(", ")
-      : "Author information unavailable";
-
-  const year =
-    record.year || "n.d.";
-
-  const title =
-    record.title ||
-    "Title unavailable";
-
-  const venue =
-    record.venue
-      ? ` ${record.venue}.`
-      : "";
-
-  const identifier = record.doi
-    ? ` https://doi.org/${record.doi}`
-    : record.pmid
-    ? ` https://pubmed.ncbi.nlm.nih.gov/${record.pmid}/`
-    : record.url
-    ? ` ${record.url}`
-    : "";
-
-  return `${index + 1}. ${authors} (${year}). ${title}.${venue}${identifier}`;
-}
-
-/* =========================================================
-   EVIDENCE PACK
-========================================================= */
-
-function buildEvidencePack(records) {
-  return records
-    .map((r, i) => {
-      return `
-STUDY ${i + 1}
-DATABASE: ${r.source}
-TITLE: ${r.title}
-YEAR: ${r.year || "Unknown"}
-AUTHORS: ${(r.authors || []).join(", ") || "Unknown"}
-VENUE: ${r.venue || "Unknown"}
-DOI: ${r.doi || "None"}
-PMID: ${r.pmid || "None"}
-CITED BY: ${
-        r.citedBy === null ||
-        r.citedBy === undefined
-          ? "Unknown"
-          : r.citedBy
-      }
-ABSTRACT:
-${
-  r.abstract
-    ? truncate(r.abstract, 3000)
-    : "[ABSTRACT NOT AVAILABLE FROM THIS API]"
-}
-`;
-    })
-    .join("\n-----------------------------\n");
-}
-
-/* =========================================================
-   MCP
-========================================================= */
+/*
+=========================================================
+MCP SERVER
+=========================================================
+*/
 
 function createServer(env) {
   const server = new McpServer({
     name: "TRT — Tamer RED TEAM",
-    version: "6.0.0"
+    version: "5.0.0"
   });
 
-  /* -------------------------------------------------------
-     TRT RESEARCH
-  ------------------------------------------------------- */
+  const simpleSchema = z.object({
+    text: z
+      .string()
+      .min(1)
+      .describe(
+        "Material, claim, argument, analysis, draft or research question."
+      )
+  });
+
+  const researchSchema = z.object({
+    task: z
+      .string()
+      .min(1)
+      .describe(
+        "The exact research task or instruction that must be followed."
+      ),
+
+    material: z
+      .string()
+      .optional()
+      .describe(
+        "Research material, notes, evidence, excerpts, source summaries, data descriptions or draft text supplied for analysis."
+      ),
+
+    constraints: z
+      .string()
+      .optional()
+      .describe(
+        "Required scope, categories, sample size, inclusion/exclusion criteria, output structure or other instructions that must be preserved."
+      )
+  });
+
+  /*
+  -------------------------------------------------------
+  TRT RESEARCH — PRIMARY TOOL
+  -------------------------------------------------------
+  */
 
   server.registerTool(
     "trt_research",
     {
       description:
-        "Conduct real academic research using live academic APIs, evaluate the requested number of unique studies where available, then perform adversarial TRT synthesis. Returns research trace, long report, and references derived from retrieved API metadata.",
+        "Primary TRT research mode. Conduct ambitious adversarial research, reverse-test the working hypothesis, examine supporting and contradictory evidence, develop novel synthesis when justified, propose falsification tests, and follow the user's requested scope and structure exactly. Never fabricate bibliographic information.",
 
-      inputSchema: z.object({
-        topic: z
-          .string()
-          .min(3)
-          .describe(
-            "Exact research topic/question."
-          ),
-
-        source_count: z
-          .number()
-          .int()
-          .min(5)
-          .max(200)
-          .describe(
-            "Target number of unique academic studies to evaluate. The user chooses this number."
-          ),
-
-        instructions: z
-          .string()
-          .optional()
-          .describe(
-            "Additional scope, inclusion/exclusion criteria, time period, population, output requirements, or special RED TEAM instructions."
-          )
-      })
+      inputSchema: researchSchema
     },
 
     async ({
-      topic,
-      source_count,
-      instructions = ""
+      task,
+      material = "",
+      constraints = ""
     }) => {
       try {
-        /*
-        We intentionally over-retrieve because databases overlap.
-        */
-        const perSource = Math.min(
-          Math.max(
-            Math.ceil(source_count * 0.8),
-            10
-          ),
-          100
+        const prompt = `
+USER'S RESEARCH TASK
+
+${task}
+
+MANDATORY CONSTRAINTS / OUTPUT REQUIREMENTS
+
+${constraints || "No additional constraints supplied."}
+
+SUPPLIED RESEARCH MATERIAL
+
+${material || "No additional research material supplied."}
+
+INSTRUCTIONS
+
+Perform the task using the full TRT Research protocol.
+
+Do not replace the user's task with a narrower task.
+
+Research the question conceptually and adversarially.
+
+Develop novel synthesis when warranted.
+
+Explicitly distinguish direct evidence, indirect evidence,
+counter-evidence and novel synthesis.
+
+Attempt to falsify important conclusions.
+
+Do not fabricate bibliographic information.
+
+Return the most useful research result possible from the material
+and knowledge available to you.
+`;
+
+        const result = await callNvidia(
+          env,
+          TRT_RESEARCH_SYSTEM,
+          prompt,
+          3500,
+          "none"
         );
 
-        const sourceStatus = {
-          openalex: "not run",
-          ieee: "not run",
-          crossref: "not run",
-          europepmc: "not run"
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `TRT — Tamer RED TEAM Research\n` +
+                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
+                result
+            }
+          ]
         };
+      } catch (error) {
+        return {
+          isError: true,
 
-        const errors = [];
+          content: [
+            {
+              type: "text",
+              text:
+                `TRT Research error: ${
+                  error instanceof Error
+                    ? error.message
+                    : String(error)
+                }`
+            }
+          ]
+        };
+      }
+    }
+  );
 
-        const jobs = [
-          searchOpenAlex(
-            env,
-            topic,
-            perSource
-          )
-            .then((x) => {
-              sourceStatus.openalex =
-                `OK (${x.length})`;
-              return x;
-            })
-            .catch((e) => {
-              sourceStatus.openalex =
-                `ERROR`;
-              errors.push(
-                `OpenAlex: ${e.message}`
-              );
-              return [];
-            }),
+  /*
+  -------------------------------------------------------
+  STANDARD RED TEAM
+  -------------------------------------------------------
+  */
 
-          searchIEEE(
-            env,
-            topic,
-            perSource
-          )
-            .then((x) => {
-              sourceStatus.ieee =
-                env.IEEE_API_KEY
-                  ? `OK (${x.length})`
-                  : "SKIPPED — no IEEE_API_KEY";
-              return x;
-            })
-            .catch((e) => {
-              sourceStatus.ieee =
-                `ERROR`;
-              errors.push(
-                `IEEE: ${e.message}`
-              );
-              return [];
-            }),
+  server.registerTool(
+    "red_team",
+    {
+      description:
+        "Quick adversarial TRT review.",
 
-          searchCrossref(
-            topic,
-            perSource
-          )
-            .then((x) => {
-              sourceStatus.crossref =
-                `OK (${x.length})`;
-              return x;
-            })
-            .catch((e) => {
-              sourceStatus.crossref =
-                `ERROR`;
-              errors.push(
-                `Crossref: ${e.message}`
-              );
-              return [];
-            }),
+      inputSchema: simpleSchema
+    },
 
-          searchEuropePMC(
-            topic,
-            perSource
-          )
-            .then((x) => {
-              sourceStatus.europepmc =
-                `OK (${x.length})`;
-              return x;
-            })
-            .catch((e) => {
-              sourceStatus.europepmc =
-                `ERROR`;
-              errors.push(
-                `Europe PMC: ${e.message}`
-              );
-              return [];
-            })
-        ];
+    async ({ text }) => {
+      try {
+        const result = await callNvidia(
+          env,
+          STANDARD_SYSTEM,
+          text,
+          1500,
+          "none"
+        );
 
-        const groups =
-          await Promise.all(jobs);
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `TRT STANDARD\n` +
+                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
+                result
+            }
+          ]
+        };
+      } catch (error) {
+        return {
+          isError: true,
 
-        const rawRecords =
-          groups.flat();
+          content: [
+            {
+              type: "text",
+              text:
+                `RED TEAM error: ${
+                  error instanceof Error
+                    ? error.message
+                    : String(error)
+                }`
+            }
+          ]
+        };
+      }
+    }
+  );
 
-        const unique =
-          deduplicate(rawRecords);
+  /*
+  -------------------------------------------------------
+  DEEP
+  -------------------------------------------------------
+  */
 
-        /*
-        Prefer records with abstracts, then citation count.
-        */
-        unique.sort((a, b) => {
-          const aa =
-            a.abstract ? 1 : 0;
-          const ba =
-            b.abstract ? 1 : 0;
+  server.registerTool(
+    "red_team_deep",
+    {
+      description:
+        "Deep scientific and methodological TRT review.",
 
-          if (aa !== ba) {
-            return ba - aa;
-          }
+      inputSchema: simpleSchema
+    },
 
-          return (
-            (b.citedBy || 0) -
-            (a.citedBy || 0)
-          );
-        });
+    async ({ text }) => {
+      try {
+        const result = await callNvidia(
+          env,
+          DEEP_SYSTEM,
+          text,
+          3000,
+          "none"
+        );
 
-        const selected =
-          unique.slice(
-            0,
-            source_count
-          );
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `TRT DEEP\n` +
+                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
+                result
+            }
+          ]
+        };
+      } catch (error) {
+        return {
+          isError: true,
 
-        const abstractCount =
-          selected.filter(
-            (x) => x.abstract
-          ).length;
+          content: [
+            {
+              type: "text",
+              text:
+                `RED TEAM DEEP error: ${
+                  error instanceof Error
+                    ? error.message
+                    : String(error)
+                }`
+            }
+          ]
+        };
+      }
+    }
+  );
 
-        if (!selected.length) {
-          throw new Error(
-            "No academic records were retrieved. Research was not completed."
-          );
-        }
+  /*
+  -------------------------------------------------------
+  MAX
+  -------------------------------------------------------
+  */
 
-        /*
-        Keep Nemotron payload bounded to avoid the 524 problem
-        we observed with very large synchronous calls.
-        */
-        const synthesisSet =
-          selected.slice(0,
+  server.registerTool(
+    "red_team_max",
+    {
+      description:
+        "Maximum adversarial TRT review.",
+
+      inputSchema: simpleSchema
+    },
+
+    async ({ text }) => {
+      try {
+        const result = await callNvidia(
+          env,
+          MAX_SYSTEM,
+          text,
+          3500,
+          "none"
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `TRT MAX\n` +
+                `NVIDIA model: ${NVIDIA_MODEL}\n\n` +
+                result
+            }
+          ]
+        };
+      } catch (error) {
+        return {
+          isError: true,
+
+          content: [
+            {
+              type: "text",
+              text:
+                `RED TEAM MAX error: ${
+                  error instanceof Error
+                    ? error.message
+                    : String(error)
+                }`
+            }
+          ]
+        };
+      }
+    }
+  );
+
+  return server;
+}
+
+/*
+=========================================================
+CLOUDFLARE WORKER
+=========================================================
+*/
+
+export default {
+  fetch(request, env, ctx) {
+    const handler =
+      createMcpHandler(() => createServer(env));
+
+    return handler(request, env, ctx);
+  }
+};
