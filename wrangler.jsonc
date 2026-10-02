@@ -1,5 +1,10 @@
 {
-  "name": "tamer-red-team-council",
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "round-cell-c78c",
   "main": "src/index.js",
-  "compatibility_date": "2026-10-02"
+  "compatibility_date": "2026-10-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  }
 }
