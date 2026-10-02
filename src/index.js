@@ -12,15 +12,15 @@ function createServer() {
     "hello",
     {
       description: "Test whether the MCP connection works",
-      inputSchema: {
+      inputSchema: z.object({
         name: z.string().optional()
-      }
+      })
     },
     async ({ name }) => ({
       content: [
         {
           type: "text",
-          text: `Hello ${name ?? "Tamer"}! MCP is working.`
+          text: `Hello, ${name ?? "Tamer"}! MCP is working.`
         }
       ]
     })
@@ -29,8 +29,10 @@ function createServer() {
   return server;
 }
 
+const handler = createMcpHandler(createServer);
+
 export default {
   fetch(request, env, ctx) {
-    return createMcpHandler(createServer)(request, env, ctx);
+    return handler(request, env, ctx);
   }
 };
