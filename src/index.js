@@ -5,23 +5,34 @@ import { z } from "zod";
 const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
 
 async function getModels(env) {
-  const r = await fetch(`${NVIDIA_BASE}/models`, {
+  const response = await fetch(`${NVIDIA_BASE}/models`, {
     headers: {
       Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
       Accept: "application/json",
     },
   });
 
-  if (!r.ok) {
-    throw new Error(`NVIDIA models error: ${r.status} ${await r.text()}`);
+  if (!response.ok) {
+    throw new Error(
+      `NVIDIA models error: ${response.status} ${await response.text()}`
+    );
   }
 
-  const data = await r.json();
-  return (data.data || []).map((m) => m.id).filter(Boolean);
+  const data = await response.json();
+
+  return (data.data || [])
+    .map((model) => model.id)
+    .filter(Boolean);
 }
 
-async function callNvidia(env, model, system, user, maxTokens = 5000) {
-  const r = await fetch(`${NVIDIA_BASE}/chat/completions`, {
+async function callNvidia(
+  env,
+  model,
+  systemPrompt,
+  userPrompt,
+  maxTokens = 5000
+) {
+  const response = await fetch(`${NVIDIA_BASE}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
@@ -31,26 +42,34 @@ async function callNvidia(env, model, system, user, maxTokens = 5000) {
     body: JSON.stringify({
       model,
       messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        {
+          role: "user",
+          content: userPrompt,
+        },
       ],
       temperature: 0.2,
       max_tokens: maxTokens,
     }),
   });
 
-  if (!r.ok) {
+  if (!response.ok) {
     throw new Error(
-      `NVIDIA completion error (${model}): ${r.status} ${await r.text()}`
+      `NVIDIA completion error (${model}): ` +
+        `${response.status} ${await response.text()}`
     );
   }
 
-  const data = await r.json();
+  const data = await response.json();
+
   return data.choices?.[0]?.message?.content || "";
 }
 
 function chooseModels(models, count) {
-  const preferred = [
+  const preferredHints = [
     "nvidia/nemotron",
     "openai/gpt-oss",
     "qwen",
@@ -59,43 +78,67 @@ function chooseModels(models, count) {
     "mistral",
   ];
 
-  const chosen = [];
+  const selected = [];
 
-  for (const hint of preferred) {
+  for (const hint of preferredHints) {
     const found = models.find(
-      (m) =>
-        m.toLowerCase().includes(hint.toLowerCase()) &&
-        !chosen.includes(m)
+      (model) =>
+        model.toLowerCase().includes(hint.toLowerCase()) &&
+        !selected.includes(model)
     );
-    if (found) chosen.push(found);
-    if (chosen.length >= count) break;
+
+    if (found) {
+      selected.push(found);
+    }
+
+    if (selected.length >= count) {
+      break;
+    }
   }
 
-  for (const m of models) {
-    if (!chosen.includes(m)) chosen.push(m);
-    if (chosen.length >= count) break;
+  for (const model of models) {
+    if (!selected.includes(model)) {
+      selected.push(model);
+    }
+
+    if (selected.length >= count) {
+      break;
+    }
   }
 
-  return chosen.slice(0, count);
+  return selected.slice(0, count);
 }
 
 const BASE_SYSTEM = `
 You are a rigorous RED TEAM reviewer.
 
 Your job is NOT to agree with the author.
-Your job is to find weaknesses, unsupported claims, methodological problems,
-logical gaps, numerical inconsistencies, alternative explanations,
-overclaiming, missing controls, citation-risk, and reproducibility problems.
 
-Never invent evidence or citations.
-Clearly distinguish:
-1. verified problem,
-2. probable problem,
-3. point requiring verification,
-4. stylistic suggestion.
+Your job is to identify:
+- unsupported claims
+- methodological weaknesses
+- logical gaps
+- numerical inconsistencies
+- alternative explanations
+- overclaiming
+- missing controls
+- citation risks
+- reproducibility problems
 
-Be constructive and specific.
-Quote or identify the exact passage/problem when possible.
+Never invent evidence.
+Never invent citations.
+
+Clearly distinguish between:
+
+1. VERIFIED PROBLEM
+2. PROBABLE PROBLEM
+3. REQUIRES VERIFICATION
+4. EDITORIAL OR STYLE SUGGESTION
+
+Be constructive, skeptical and specific.
+
+Whenever possible identify the exact passage or claim that causes
+the problem.
 `;
 
 function createServer(env) {
@@ -104,95 +147,222 @@ function createServer(env) {
     version: "1.0.0",
   });
 
+  /*
+   * =========================================================
+   * RED TEAM
+   * =========================================================
+   */
+
   server.registerTool(
     "red_team",
     {
       description:
         "Run a rigorous RED TEAM review using one NVIDIA model.",
+
       inputSchema: {
-        text: z.string().describe("Text, chapter, analysis, or task to review"),
+        text: z
+          .string()
+          .describe("Text, chapter, analysis or material to review"),
+
         instructions: z
           .string()
           .optional()
           .describe("Additional RED TEAM instructions"),
       },
     },
-    async ({ text, instructions = "" }) => {
-      const models = await getModels(env);
-      const [model] = chooseModels(models, 1);
 
-      if (!model) throw new Error("No NVIDIA model is available.");
+    async ({ text, instructions = "" }) => {
+      const availableModels = await getModels(env);
+
+      const models = chooseModels(availableModels, 1);
+
+      if (!models.length) {
+        throw new Error("No NVIDIA model is available.");
+      }
+
+      const model = models[0];
 
       const result = await callNvidia(
         env,
         model,
         BASE_SYSTEM,
-        `${instructions}\n\nMATERIAL TO REVIEW:\n${text}`
+        `
+ADDITIONAL INSTRUCTIONS:
+
+${instructions}
+
+MATERIAL TO REVIEW:
+
+${text}
+`
       );
 
       return {
         content: [
           {
             type: "text",
-            text: `MODEL: ${model}\n\n${result}`,
+            text: `
+TAMER RED TEAM
+
+MODEL:
+${model}
+
+==============================
+
+${result}
+`,
           },
         ],
       };
     }
   );
 
+  /*
+   * =========================================================
+   * RED TEAM DEEP
+   * =========================================================
+   */
+
   server.registerTool(
     "red_team_deep",
     {
       description:
         "Run three independent NVIDIA RED TEAM reviews and synthesize them.",
+
       inputSchema: {
-        text: z.string().describe("Text, chapter, analysis, or task to review"),
-        instructions: z.string().optional(),
+        text: z
+          .string()
+          .describe("Text, chapter, analysis or material to review"),
+
+        instructions: z
+          .string()
+          .optional()
+          .describe("Additional RED TEAM instructions"),
       },
     },
-    async ({ text, instructions = "" }) => {
-      const models = chooseModels(await getModels(env), 3);
 
-      if (!models.length) throw new Error("No NVIDIA models are available.");
+    async ({ text, instructions = "" }) => {
+      const availableModels = await getModels(env);
+
+      const models = chooseModels(availableModels, 3);
+
+      if (!models.length) {
+        throw new Error("No NVIDIA models are available.");
+      }
 
       const roles = [
-        "Act as a skeptical scientific peer reviewer. Focus on evidence and causal claims.",
-        "Act as a methodology and statistics reviewer. Look for design, measurement, sampling, numerical and inference problems.",
-        "Act as an adversarial logic reviewer. Try to falsify the argument and identify alternative explanations.",
+        `
+You are a skeptical scientific peer reviewer.
+
+Focus especially on:
+- scientific validity
+- strength of evidence
+- causal claims
+- generalization
+- unsupported conclusions
+`,
+
+        `
+You are a methodology and statistics reviewer.
+
+Focus especially on:
+- study design
+- sampling
+- classification
+- measurement validity
+- denominators
+- numerical consistency
+- statistics
+- reproducibility
+`,
+
+        `
+You are an adversarial falsification reviewer.
+
+Assume the central argument may be wrong.
+
+Search for:
+- alternative explanations
+- confounders
+- logical gaps
+- contradictory evidence
+- conditions that would falsify the thesis
+`,
       ];
 
       const reviews = await Promise.all(
-        models.map((model, i) =>
-          callNvidia(
+        models.map(async (model, index) => {
+          const answer = await callNvidia(
             env,
             model,
-            `${BASE_SYSTEM}\n${roles[i % roles.length]}`,
-            `${instructions}\n\nMATERIAL TO REVIEW:\n${text}`
-          ).then((answer) => ({ model, answer }))
-        )
+            `${BASE_SYSTEM}
+
+${roles[index % roles.length]}`,
+            `
+ADDITIONAL INSTRUCTIONS:
+
+${instructions}
+
+MATERIAL TO REVIEW:
+
+${text}
+`
+          );
+
+          return {
+            model,
+            answer,
+          };
+        })
       );
 
-      const joined = reviews
+      const joinedReviews = reviews
         .map(
-          (r, i) =>
-            `REVIEW ${i + 1}\nMODEL: ${r.model}\n\n${r.answer}`
+          (review, index) => `
+REVIEW ${index + 1}
+
+MODEL:
+${review.model}
+
+${review.answer}
+`
         )
-        .join("\n\n============================\n\n");
+        .join(`
+
+========================================
+
+`);
 
       const synthesisModel = models[0];
 
       const synthesis = await callNvidia(
         env,
         synthesisModel,
-        `You are the senior RED TEAM chair.
-Compare independent reviews.
-Do not assume majority agreement means truth.
-Remove duplicates.
-Flag contradictions between reviewers.
-Separate high-confidence findings from claims requiring verification.
-Never invent sources.`,
-        `ORIGINAL MATERIAL:\n${text}\n\nINDEPENDENT REVIEWS:\n${joined}`,
+        `
+You are the senior chair of a scientific RED TEAM.
+
+You are given several independent reviews.
+
+Your responsibilities:
+
+- compare the reviews
+- remove duplicates
+- preserve substantive minority objections
+- identify contradictions between reviewers
+- distinguish high-confidence findings from uncertain findings
+- identify possible reviewer/model errors
+- never treat majority agreement as proof
+- never invent citations
+`,
+        `
+ORIGINAL MATERIAL:
+
+${text}
+
+INDEPENDENT REVIEWS:
+
+${joinedReviews}
+`,
         6000
       );
 
@@ -200,106 +370,227 @@ Never invent sources.`,
         content: [
           {
             type: "text",
-            text:
-              `RED TEAM DEEP\nMODELS: ${models.join(", ")}\n\n` +
-              `=== SYNTHESIS ===\n${synthesis}\n\n` +
-              `=== INDEPENDENT REVIEWS ===\n${joined}`,
+
+            text: `
+TAMER RED TEAM — DEEP
+
+MODELS USED:
+
+${models.join("\n")}
+
+========================================
+SYNTHESIS
+========================================
+
+${synthesis}
+
+========================================
+INDEPENDENT REVIEWS
+========================================
+
+${joinedReviews}
+`,
           },
         ],
       };
     }
   );
 
+  /*
+   * =========================================================
+   * RED TEAM MAX
+   * =========================================================
+   */
+
   server.registerTool(
     "red_team_max",
     {
       description:
-        "Maximum RED TEAM: five specialist NVIDIA reviewers plus an independent synthesis.",
+        "Maximum RED TEAM using five specialist NVIDIA reviewers and a council synthesis.",
+
       inputSchema: {
-        text: z.string().describe("Material or task for maximum RED TEAM review"),
-        instructions: z.string().optional(),
+        text: z
+          .string()
+          .describe("Material or task for maximum RED TEAM review"),
+
+        instructions: z
+          .string()
+          .optional()
+          .describe("Additional RED TEAM instructions"),
       },
     },
-    async ({ text, instructions = "" }) => {
-      const models = chooseModels(await getModels(env), 5);
 
-      if (!models.length) throw new Error("No NVIDIA models are available.");
+    async ({ text, instructions = "" }) => {
+      const availableModels = await getModels(env);
+
+      const models = chooseModels(availableModels, 5);
+
+      if (!models.length) {
+        throw new Error("No NVIDIA models are available.");
+      }
 
       const roles = [
-        `SCIENTIFIC REVIEWER:
-Challenge scientific validity, evidence strength, causality, generalization and overclaiming.`,
+        `
+SCIENTIFIC REVIEWER
 
-        `METHODOLOGY REVIEWER:
-Audit study design, classifications, sampling, controls, measurement validity,
-statistics, denominators, missing data and reproducibility.`,
+Challenge:
+- scientific validity
+- evidence strength
+- causal inference
+- generalization
+- overclaiming
+`,
 
-        `ADVERSARIAL FALSIFICATION REVIEWER:
+        `
+METHODOLOGY AND STATISTICS REVIEWER
+
+Audit:
+- study design
+- classifications
+- sampling
+- controls
+- measurement validity
+- statistics
+- denominators
+- missing data
+- numerical consistency
+- reproducibility
+`,
+
+        `
+ADVERSARIAL FALSIFICATION REVIEWER
+
 Assume the central thesis may be wrong.
-Find counter-explanations, confounders and evidence that would falsify it.`,
 
-        `SOURCE AND CLAIM AUDITOR:
-Identify statements requiring citations.
-Detect citation-risk and claim-evidence mismatch.
-Never invent or fabricate a reference.`,
+Search aggressively for:
+- counter-explanations
+- confounders
+- logical weaknesses
+- contradictory interpretations
+- evidence that would falsify the thesis
+`,
 
-        `EDITORIAL CONSISTENCY REVIEWER:
-Find contradictions, ambiguous definitions, inconsistent terminology,
-internal numerical conflicts and places where wording exceeds evidence.`,
+        `
+SOURCE AND CLAIM AUDITOR
+
+Identify:
+- claims requiring citations
+- claim-evidence mismatches
+- unsupported factual statements
+- citation risks
+- statements requiring external verification
+
+Never fabricate a source.
+`,
+
+        `
+EDITORIAL CONSISTENCY REVIEWER
+
+Find:
+- contradictions
+- ambiguous definitions
+- inconsistent terminology
+- internal numerical conflicts
+- wording stronger than the evidence
+- inconsistencies between sections
+`,
       ];
 
       const reviews = await Promise.all(
-        models.map((model, i) =>
-          callNvidia(
+        models.map(async (model, index) => {
+          const answer = await callNvidia(
             env,
             model,
-            `${BASE_SYSTEM}\n\n${roles[i]}`,
-            `${instructions}\n\nMATERIAL TO REVIEW:\n${text}`,
+            `${BASE_SYSTEM}
+
+${roles[index]}`,
+            `
+ADDITIONAL INSTRUCTIONS:
+
+${instructions}
+
+MATERIAL TO REVIEW:
+
+${text}
+`,
             6000
-          ).then((answer) => ({
+          );
+
+          return {
             model,
-            role: roles[i].split(":")[0],
+            role: roles[index].trim().split("\n")[0],
             answer,
-          }))
-        )
+          };
+        })
       );
 
-      const joined = reviews
+      const joinedReviews = reviews
         .map(
-          (r, i) =>
-            `REVIEWER ${i + 1}: ${r.role}\nMODEL: ${r.model}\n\n${r.answer}`
+          (review, index) => `
+REVIEWER ${index + 1}
+
+ROLE:
+${review.role}
+
+MODEL:
+${review.model}
+
+${review.answer}
+`
         )
-        .join("\n\n====================================\n\n");
+        .join(`
+
+==================================================
+
+`);
 
       const synthesisModel = models[0];
 
       const synthesis = await callNvidia(
         env,
         synthesisModel,
-        `You are the chair of a rigorous scientific RED TEAM council.
+        `
+You are the chair of a rigorous scientific RED TEAM council.
 
-Five reviewers independently examined the material.
+Five independent reviewers examined the material.
 
 Produce a consolidated report with these sections:
 
 A. CRITICAL FINDINGS
+
 B. IMPORTANT FINDINGS
+
 C. POINTS REQUIRING EXTERNAL VERIFICATION
+
 D. DISAGREEMENTS BETWEEN REVIEWERS
+
 E. POSSIBLE MODEL ERRORS OR OVERREACH
-F. NUMERICAL / METHODOLOGICAL ISSUES
+
+F. NUMERICAL AND METHODOLOGICAL ISSUES
+
 G. CLAIM-EVIDENCE ALIGNMENT
+
 H. EXACT REVISIONS RECOMMENDED
+
 I. REMAINING RISKS AFTER REVISION
 
-Do not use voting as proof.
-Do not fabricate references.
-Do not turn uncertainty into fact.
-Preserve minority objections when substantive.`,
-        `ORIGINAL MATERIAL:\n${text}
+Rules:
+
+- Do not use voting as proof.
+- Do not fabricate references.
+- Do not turn uncertainty into fact.
+- Preserve substantive minority objections.
+- Explicitly flag findings that require external verification.
+`,
+        `
+ORIGINAL MATERIAL:
+
+${text}
 
 COUNCIL REPORTS:
 
-${joined}`,
+${joinedReviews}
+`,
         8000
       );
 
@@ -307,11 +598,26 @@ ${joined}`,
         content: [
           {
             type: "text",
-            text:
-              `TAMER RED TEAM COUNCIL — MAX\n\n` +
-              `MODELS USED:\n${models.join("\n")}\n\n` +
-              `========== COUNCIL SYNTHESIS ==========\n\n${synthesis}\n\n` +
-              `========== FULL INDEPENDENT REPORTS ==========\n\n${joined}`,
+
+            text: `
+TAMER RED TEAM COUNCIL — MAX
+
+MODELS USED:
+
+${models.join("\n")}
+
+==================================================
+COUNCIL SYNTHESIS
+==================================================
+
+${synthesis}
+
+==================================================
+FULL INDEPENDENT REPORTS
+==================================================
+
+${joinedReviews}
+`,
           },
         ],
       };
@@ -321,6 +627,12 @@ ${joined}`,
   return server;
 }
 
+/*
+ * =========================================================
+ * CLOUDFLARE WORKER
+ * =========================================================
+ */
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -328,15 +640,28 @@ export default {
     if (url.pathname === "/") {
       return new Response(
         "Tamer RED TEAM Council is running. MCP endpoint: /mcp",
-        { status: 200 }
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+          },
+        }
       );
     }
 
     if (url.pathname === "/mcp") {
-      const server = createServer(env);
-      return createMcpHandler(server)(request, env, ctx);
+      const handler = createMcpHandler(
+        () => createServer(env),
+        {
+          route: "/mcp",
+        }
+      );
+
+      return handler(request, env, ctx);
     }
 
-    return new Response("Not found", { status: 404 });
+    return new Response("Not found", {
+      status: 404,
+    });
   },
 };
